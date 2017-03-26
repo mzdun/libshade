@@ -1,0 +1,22 @@
+cmake_minimum_required(VERSION 3.4)
+project(shade CXX)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/inc)
+
+set(PROJECT_VERSION_MAJOR 0)
+set(PROJECT_VERSION_MINOR 1)
+set(PROJECT_VERSION_PATCH 0)
+set(PROJECT_VERSION_BUILD 1)
+set(PROJECT_VERSION_STABILITY "-alpha")
+set(PROJECT_VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH})
+set(PROJECT_VERSION_FULL ${PROJECT_VERSION}${PROJECT_VERSION_STABILITY}+${PROJECT_VERSION_BUILD})
+
+set(SRCS
+	src/discovery.cc
+	inc/shade/discovery.h
+	inc/shade/tcp.h
+	inc/shade/udp.h
+)
+
+add_library(${PROJECT_NAME} STATIC ${SRCS})
