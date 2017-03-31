@@ -1,9 +1,16 @@
 cmake_minimum_required(VERSION 3.4)
 project(shade CXX)
 
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_STATIC_RUNTIME ON)
+find_package(Boost 1.60 COMPONENTS system)
+
+include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/inc)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/tangle/inc)
+
+link_directories(${Boost_LIBRARY_DIRS})
 
 set(PROJECT_VERSION_MAJOR 0)
 set(PROJECT_VERSION_MINOR 1)
@@ -18,6 +25,11 @@ set(SRCS
 	inc/shade/discovery.h
 	inc/shade/tcp.h
 	inc/shade/udp.h
+)
+
+set(ASIO_SRCS
+	src/asio/network.cc
+	inc/shade/asio/network.h
 )
 
 set(TANGLE_SRCS
@@ -40,10 +52,11 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
 endif()
 
 add_library(shade STATIC ${SRCS})
+add_library(shade-asio STATIC ${ASIO_SRCS})
 add_library(shade-tangle STATIC ${TANGLE_SRCS})
 
 add_executable(shade-test playground/main.cc)
-foreach(DEP shade shade-tangle)
+foreach(DEP shade shade-asio shade-tangle)
 	add_dependencies(shade-test ${DEP})
 	target_link_libraries(shade-test $<TARGET_FILE:${DEP}>)
 endforeach()
