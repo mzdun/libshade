@@ -3,6 +3,7 @@ project(shade CXX)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/inc)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/tangle/inc)
 
 set(PROJECT_VERSION_MAJOR 0)
 set(PROJECT_VERSION_MINOR 1)
@@ -19,4 +20,31 @@ set(SRCS
 	inc/shade/udp.h
 )
 
-add_library(${PROJECT_NAME} STATIC ${SRCS})
+set(TANGLE_SRCS
+	3rd_party/tangle/src/uri.cpp
+	3rd_party/tangle/src/http_parser.cpp
+	3rd_party/tangle/src/base_parser.cpp
+	3rd_party/tangle/src/hasher.cpp
+
+	3rd_party/tangle/inc/tangle/cstring.h
+	3rd_party/tangle/inc/tangle/uri.h
+	3rd_party/tangle/inc/tangle/msg/http_parser.h
+	3rd_party/tangle/inc/tangle/msg/base_parser.h
+	3rd_party/tangle/inc/tangle/msg/hasher.h
+)
+
+if (WIN32)
+add_definitions(-D_WIN32_WINNT=0x0600)
+set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+endif()
+
+add_library(shade STATIC ${SRCS})
+add_library(shade-tangle STATIC ${TANGLE_SRCS})
+
+add_executable(shade-test playground/main.cc)
+foreach(DEP shade shade-tangle)
+	add_dependencies(shade-test ${DEP})
+	target_link_libraries(shade-test $<TARGET_FILE:${DEP}>)
+endforeach()
+target_link_libraries(shade-test ${Boost_LIBRARIES})

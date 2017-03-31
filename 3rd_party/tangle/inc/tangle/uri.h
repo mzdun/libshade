@@ -449,7 +449,8 @@ namespace tangle {
 		\returns an immutable reference to
 		         the underlying string
 		*/
-		const std::string& string() const { return m_uri; }
+		const std::string& string() const& { return m_uri; }
+		std::string string() && { return std::move(m_uri); }
 
 		/**
 		Removes the last component of the path.

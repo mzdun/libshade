@@ -18,8 +18,10 @@ namespace shade {
 		bool conntected_ = false;
 		std::unique_ptr<udp> udp_socket_;
 		std::unique_ptr<tcp> tcp_socket_;
+		std::unique_ptr<read_handler> current_search_;
 
 		std::unordered_map<std::string, bridge_info> known_bridges_;
+
 	public:
 		using onbridge = std::function<void(const std::string& id, const std::string& base)>;
 		discovery(std::unique_ptr<udp> udp, std::unique_ptr<tcp> tcp);
@@ -30,5 +32,7 @@ namespace shade {
 		~discovery();
 
 		bool search(onbridge callback);
+
+		bool seen(const std::string& id, const std::string& location);
 	};
 }

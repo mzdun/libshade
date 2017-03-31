@@ -51,7 +51,7 @@ namespace tangle { namespace msg {
 
 		inline size_t report_read(size_t prev, size_t position)
 		{
-			return (position > prev) ? prev - position : 0;
+			return (position > prev) ? position - prev : 0;
 		}
 	}
 
