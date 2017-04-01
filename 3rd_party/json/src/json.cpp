@@ -26,10 +26,7 @@
 #include <sstream>
 #include <iomanip>
 #include <cctype>
-#include <net/utf8.hpp>
-#if defined _WIN32 || defined WIN32
-#include <Windows.h>
-#endif
+#include "utf8.hpp"
 
 namespace json
 {
@@ -218,9 +215,6 @@ namespace json
 		token_t pos_t::err(const char* msg) const {
 			std::ostringstream o;
 			o << "(" << line << ',' << column << "): error: " << msg << "\n";
-#if defined _WIN32 || defined WIN32
-			OutputDebugStringA(o.str().c_str());
-#endif
 			std::cerr << o.str() << std::flush;
 			return tok(JSON_ERROR);
 		}

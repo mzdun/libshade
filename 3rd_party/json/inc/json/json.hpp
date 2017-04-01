@@ -26,7 +26,7 @@
 #define __JSON_JSON_HPP__
 
 #include <string>
-#include <map>
+#include <unordered_map>
 #include <list>
 #include <vector>
 #include <memory>
@@ -326,7 +326,7 @@ namespace json
 	}
 
 	struct map : value {
-		using container_t = std::map<std::string, value>;
+		using container_t = std::unordered_map<std::string, value>;
 		using iterator = container_t::iterator;
 		using const_iterator = container_t::const_iterator;
 		using mapped_type = container_t::mapped_type;

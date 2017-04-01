@@ -47,6 +47,12 @@ namespace json
 		return ctx;
 	}
 
+	template <typename T>
+	inline bool unpack(T& ctx, const value& v) {
+		translator<T> p;
+		return p.unpack(v, &ctx);
+	}
+
 	struct base_translator {
 		virtual ~base_translator() {}
 		virtual value pack(const void* ctx) const = 0;
@@ -105,11 +111,11 @@ namespace json
 	};
 
 	template <typename T>
-	struct translator<std::map<std::string, T>> : base_translator
+	struct translator<std::unordered_map<std::string, T>> : base_translator
 	{
 		value pack(const void* ctx) const override {
 			map out;
-			using C = std::map<std::string, T>;
+			using C = std::unordered_map<std::string, T>;
 			const C& container = *static_cast<const C*>(ctx);
 			for (auto&& item : container)
 				out.add(item.first, json::pack(item.second));
@@ -118,7 +124,7 @@ namespace json
 
 		bool unpack(const value& v, void* ctx) const override {
 			auto in = get<MAP>(v);
-			using C = std::map<std::string, T>;
+			using C = std::unordered_map<std::string, T>;
 			C& out = *static_cast<C*>(ctx);
 			out.clear();
 
@@ -207,7 +213,7 @@ namespace json
 		}
 
 		template <typename T>
-		const T& front(const std::map<std::string, T>& container) {
+		const T& front(const std::unordered_map<std::string, T>& container) {
 			return container.begin()->second;
 		}
 
@@ -218,12 +224,12 @@ namespace json
 		}
 
 		template <typename T>
-		T& front(std::map<std::string, T>& container) {
+		T& front(std::unordered_map<std::string, T>& container) {
 			return container[""];
 		}
 
 		template <typename C> struct item_expected : std::integral_constant<type, VECTOR> { using value_type = typename C::value_type; };
-		template <typename T> struct item_expected<std::map<std::string, T>> : std::integral_constant<type, MAP>{ using value_type = T; };
+		template <typename T> struct item_expected<std::unordered_map<std::string, T>> : std::integral_constant<type, MAP>{ using value_type = T; };
 
 	}
 
