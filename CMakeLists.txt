@@ -22,8 +22,10 @@ set(PROJECT_VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_
 set(PROJECT_VERSION_FULL ${PROJECT_VERSION}${PROJECT_VERSION_STABILITY}+${PROJECT_VERSION_BUILD})
 
 set(SRCS
+	src/manager.cc
 	src/discovery.cc
 	src/storage.cc
+	inc/shade/manager.h
 	inc/shade/discovery.h
 	inc/shade/network.h
 	inc/shade/storage.h
