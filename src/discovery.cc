@@ -7,10 +7,6 @@
 #define STR(x) STR2(x)
 
 namespace shade {
-	namespace {
-		class listener {
-		};
-	}
 	discovery::discovery(std::unique_ptr<udp> udp, std::unique_ptr<tcp> tcp)
 		: udp_socket_(std::move(udp))
 		, tcp_socket_(std::move(tcp))
@@ -71,12 +67,14 @@ namespace shade {
 			// 4. get the contents of the xml
 			// 5. extract the base address
 			// TODO: actually take the description.xml contents...
-			tangle::uri uri{ location };
-			uri.fragment({});
-			uri.query({});
-			uri.path({});
+			auto base = tangle::uri{ location }
+				.fragment({})
+				.query({})
+				.path({})
+				.string();
+			parent->base_known(bridgeid, base);
 			// 6. for each bridge report the (id, base address) to callback
-			callback(bridgeid, uri.string());
+			callback(bridgeid, base);
 		}
 	};
 
@@ -121,10 +119,29 @@ namespace shade {
 	bool discovery::seen(const std::string& bridgeid, const std::string& location)
 	{
 		auto known = known_bridges_.find(bridgeid);
-		if (known != known_bridges_.end())
-			return true;
+		if (known != known_bridges_.end()) {
+			if (known->second.location == location)
+				return true;
+			known->second.location = location; // new lease?
+			known->second.base.clear();
+			return false;
+		}
 
 		known_bridges_[bridgeid].location = location;
+		return false;
+	}
+
+	bool discovery::base_known(const std::string& bridgeid, const std::string& base)
+	{
+		auto known = known_bridges_.find(bridgeid);
+		if (known != known_bridges_.end()) {
+			if (known->second.base == base)
+				return true;
+			known->second.base = base; // new lease?
+			return false;
+		}
+
+		known_bridges_[bridgeid].base = base;
 		return false;
 	}
 }
