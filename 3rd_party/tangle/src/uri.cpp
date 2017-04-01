@@ -575,26 +575,28 @@ namespace tangle {
 		return subspan(m_uri, m_part);
 	}
 
-	void uri::scheme(const cstring& value)
+	uri& uri::scheme(const cstring& value)
 	{
 		if (!has_scheme())
-			return;
+			return *this;
 
 		m_uri.replace(0, m_scheme, value.c_str(), value.length());
 		invalidate_scheme();
+		return *this;
 	}
 
-	void uri::authority(const cstring& value)
+	uri& uri::authority(const cstring& value)
 	{
 		if (is_opaque())
-			return;
+			return *this;
 
 		auto start = m_scheme + 3;
 		m_uri.replace(start, m_path - start, value.c_str(), value.length());
 		invalidate_path();
+		return *this;
 	}
 
-	void uri::path(const cstring& value)
+	uri& uri::path(const cstring& value)
 	{
 		ensure_query();
 		if (has_authority() && (value.empty() || value[0] != '/')) {
@@ -604,19 +606,22 @@ namespace tangle {
 		}
 		m_uri.replace(m_path, m_query - m_path, value.c_str(), value.length());
 		invalidate_path(); // query -> path due to having possibly taken the '/' branch and having ++m_path
+		return *this;
 	}
 
-	void uri::query(const cstring& value)
+	uri& uri::query(const cstring& value)
 	{
 		ensure_fragment();
 		m_uri.replace(m_query, m_part - m_query, value.c_str(), value.length());
 		invalidate_fragment();
+		return *this;
 	}
 
-	void uri::fragment(const cstring& value)
+	uri& uri::fragment(const cstring& value)
 	{
 		ensure_fragment();
 		m_uri.replace(m_part, m_uri.length() - m_part, value.c_str(), value.length());
+		return *this;
 	}
 
 	cstring remove_filename(cstring path)

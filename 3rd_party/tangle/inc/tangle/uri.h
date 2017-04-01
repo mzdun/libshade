@@ -418,31 +418,31 @@ namespace tangle {
 		Setter for the scheme property.
 		\param value new value of the property
 		*/
-		void scheme(const cstring& value);
+		uri& scheme(const cstring& value);
 
 		/**
 		Setter for the authority property.
 		\param value new value of the property
 		*/
-		void authority(const cstring& value);
+		uri& authority(const cstring& value);
 
 		/**
 		Setter for the path property.
 		\param value new value of the property
 		*/
-		void path(const cstring& value);
+		uri& path(const cstring& value);
 
 		/**
 		Setter for the query property.
 		\param value new value of the property
 		*/
-		void query(const cstring& value);
+		uri& query(const cstring& value);
 
 		/**
 		Setter for the fragment property.
 		\param value new value of the property
 		*/
-		void fragment(const cstring& value);
+		uri& fragment(const cstring& value);
 
 		/**
 		Getter for the underlying object
@@ -460,7 +460,7 @@ namespace tangle {
 		removed. If the path already ends with slash, does
 		nothing. Also, the function behaves as if the document
 		was an argument supplied to the address bar - it will
-		prepend an HTTP protocol, if not protocol is given.
+		prepend an HTTP protocol, if no protocol is given.
 
 		\param document an uri to convert to base path
 		\returns an uri, which can be used in canonical()
