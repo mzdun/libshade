@@ -1,28 +1,41 @@
 #include <shade/discovery.h>
+#include <shade/storage.h>
 #include <shade/asio/network.h>
 #include <iostream>
 
-auto asio_discovery(boost::asio::io_service& service, boost::system::error_code& ec) {
+auto asio_discovery(boost::asio::io_service& service) {
+	boost::system::error_code ec;
 	auto udp = std::make_unique<shade::asio::udp>(service, ec);
-	if (ec)
-		return std::unique_ptr<shade::discovery>{};
+	if (ec) {
+		std::cout << "shade-test: " << ec;
+		std::exit(2);
+	}
 
 	auto tcp = std::make_unique<shade::asio::tcp>(service);
-	return std::make_unique<shade::discovery>(std::move(udp), std::move(tcp));
+	return shade::discovery{ std::move(udp), std::move(tcp) };
 }
 
 int main()
 {
 	boost::asio::io_service service;
-	boost::system::error_code ec;
-	auto bridges = asio_discovery(service, ec);
-	if (ec) {
-		std::cout << "shade-test: " << ec;
-		return 2;
+	shade::storage stg;
+	stg.load();
+	{
+		auto const& bridges = stg.bridges();
+		if (bridges.empty()) {
+			printf("WAITING FOR BRIDGES\n");
+		} else {
+			for (auto const& bridge : bridges) {
+				printf("BRIDGE %s:\n", bridge.first.c_str());
+				printf("    base: [%s]\n", bridge.second.base.c_str());
+				printf("    username: [%s]\n", bridge.second.username.c_str());
+			}
+		}
 	}
-
-	bridges->search([](auto const& id, auto const& base) {
-		std::cout << id << ": " << base << "\n";
+	auto bridges = asio_discovery(service);
+	bridges.search([&](auto const& id, auto const& base) {
+		if (stg.bridge_located(id, base))
+			std::cout << id << ": " << base << "\n";
 	});
 
 	service.run();

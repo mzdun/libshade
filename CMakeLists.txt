@@ -23,10 +23,22 @@ set(PROJECT_VERSION_FULL ${PROJECT_VERSION}${PROJECT_VERSION_STABILITY}+${PROJEC
 
 set(SRCS
 	src/discovery.cc
+	src/storage.cc
 	inc/shade/discovery.h
 	inc/shade/tcp.h
 	inc/shade/udp.h
+	inc/shade/storage.h
 )
+
+if (UNIX)
+list(APPEND SRCS
+	src/storage_linux.cc
+)
+elseif(WIN32)
+list(APPEND SRCS
+	src/storage_win.cc
+)
+endif()
 
 set(ASIO_SRCS
 	src/asio/network.cc
