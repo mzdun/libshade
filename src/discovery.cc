@@ -7,19 +7,22 @@
 #define STR(x) STR2(x)
 
 namespace shade {
-	discovery::discovery(std::unique_ptr<udp> udp, std::unique_ptr<tcp> tcp)
-		: udp_socket_(std::move(udp))
-		, tcp_socket_(std::move(tcp))
+	discovery::discovery(network* net)
+		: net_{ net }
+		, udp_socket_(net->udp_socket())
 	{
 		uint16_t port = 2000;
 		unsigned int tries = 0;
 		constexpr unsigned int maxtries = 10;
 
+		if (!udp_socket_)
+			return;
+
 		while (!udp_socket_->bind(port++)) {
 			if (++tries == maxtries) return;
 		}
 
-		conntected_ = true;
+		connected_ = true;
 	}
 
 	discovery::discovery(discovery&&) = default;

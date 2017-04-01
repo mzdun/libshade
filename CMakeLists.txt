@@ -25,8 +25,7 @@ set(SRCS
 	src/discovery.cc
 	src/storage.cc
 	inc/shade/discovery.h
-	inc/shade/tcp.h
-	inc/shade/udp.h
+	inc/shade/network.h
 	inc/shade/storage.h
 )
 

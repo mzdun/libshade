@@ -5,14 +5,13 @@
 #include <string>
 #include <unordered_map>
 
-#include "shade/udp.h"
-#include "shade/tcp.h"
+#include "shade/network.h"
 
 namespace shade {
 	class discovery {
-		bool conntected_ = false;
+		bool connected_ = false;
+		network* net_;
 		std::unique_ptr<udp> udp_socket_;
-		std::unique_ptr<tcp> tcp_socket_;
 		std::unique_ptr<read_handler> current_search_;
 
 		struct bridge_info {
@@ -23,13 +22,14 @@ namespace shade {
 
 	public:
 		using onbridge = std::function<void(const std::string& id, const std::string& base)>;
-		discovery(std::unique_ptr<udp> udp, std::unique_ptr<tcp> tcp);
+		discovery(network* net);
 		discovery(const discovery&) = delete;
 		discovery(discovery&&);
 		discovery& operator=(const discovery&) = delete;
 		discovery& operator=(discovery&&);
 		~discovery();
 
+		bool ready() const { return connected_; }
 		bool search(onbridge callback);
 
 		bool seen(const std::string& id, const std::string& location);

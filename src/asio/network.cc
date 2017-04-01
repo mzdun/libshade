@@ -3,6 +3,16 @@
 #include <iostream>
 
 namespace shade { namespace asio {
+	class udp : public shade::udp {
+		io_service& service_;
+		ip::udp::socket socket_;
+	public:
+		udp(io_service&, error_code&);
+		bool bind(uint16_t) override;
+		bool write_datagram(const uint8_t* data, size_t length, uint32_t ip, uint16_t port) override;
+		std::unique_ptr<shade::read_handler> read_datagram(std::chrono::milliseconds duration, std::function<void(const uint8_t*, size_t, bool)> && cb) override;
+	};
+
 	udp::udp(io_service& service, error_code& ec)
 		: service_{ service }
 		, socket_{ service }
@@ -29,6 +39,7 @@ namespace shade { namespace asio {
 
 	class datagram_handler : public std::enable_shared_from_this<datagram_handler> {
 		static constexpr size_t max_size = 2048;
+		bool active_ = false;
 		std::array<uint8_t, max_size> data_;
 		ip::udp::socket* socket_;
 		boost::asio::deadline_timer timer_;
@@ -43,7 +54,8 @@ namespace shade { namespace asio {
 					return;
 				}
 				cb_(data_.data(), size, true);
-				async_read();
+				if (active_)
+					async_read();
 			});
 		}
 
@@ -64,12 +76,15 @@ namespace shade { namespace asio {
 			auto self = shared_from_this();
 			timer_.expires_from_now(boost::posix_time::milliseconds{ ms.count() }, ec);
 			if (ec) return;
+			active_ = true;
 			async_read();
 			timer_.async_wait([self, this](const error_code& ec) { cancel(true); });
 		}
 
 		void cancel(bool /*from_timeout*/)
 		{
+			active_ = false;
+
 			error_code ec;
 			timer_.cancel(ec);
 			ec.clear();
@@ -99,8 +114,28 @@ namespace shade { namespace asio {
 		return std::make_unique<read_handler>(io);
 	}
 
+	class tcp : public shade::tcp {
+		io_service& service_;
+	public:
+		tcp(io_service&);
+	};
+
 	tcp::tcp(io_service& service)
 		: service_{ service }
 	{
+	}
+
+	std::unique_ptr<shade::udp> network::udp_socket()
+	{
+		error_code ec;
+		auto ptr = std::make_unique<udp>(service_, ec);
+		if (ec)
+			return {};
+		return ptr;
+	}
+
+	std::unique_ptr<shade::tcp> network::tcp_socket()
+	{
+		return std::make_unique<tcp>(service_);
 	}
 } }
