@@ -9,6 +9,7 @@ include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/inc)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/tangle/inc)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/json/inc)
 
 link_directories(${Boost_LIBRARY_DIRS})
 
@@ -45,6 +46,13 @@ set(TANGLE_SRCS
 	3rd_party/tangle/inc/tangle/msg/hasher.h
 )
 
+set(JSON_SRCS
+	3rd_party/json/src/json.cpp
+	3rd_party/json/inc/json.hpp
+	3rd_party/json/inc/json/json.hpp
+	3rd_party/json/inc/json/serdes.hpp
+)
+
 if (WIN32)
 add_definitions(-D_WIN32_WINNT=0x0600)
 set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
@@ -54,9 +62,10 @@ endif()
 add_library(shade STATIC ${SRCS})
 add_library(shade-asio STATIC ${ASIO_SRCS})
 add_library(shade-tangle STATIC ${TANGLE_SRCS})
+add_library(shade-json STATIC ${JSON_SRCS})
 
 add_executable(shade-test playground/main.cc)
-foreach(DEP shade shade-asio shade-tangle)
+foreach(DEP shade shade-asio shade-tangle shade-json)
 	add_dependencies(shade-test ${DEP})
 	target_link_libraries(shade-test $<TARGET_FILE:${DEP}>)
 endforeach()
