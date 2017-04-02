@@ -27,6 +27,7 @@ set(SRCS
 	src/connection.cc
 	src/discovery.cc
 	src/storage.cc
+	src/manager_internal.h
 	inc/shade/manager.h
 	inc/shade/connection.h
 	inc/shade/discovery.h
@@ -37,10 +38,12 @@ set(SRCS
 
 if (UNIX)
 list(APPEND SRCS
+	src/manager_linux.cc
 	src/storage_linux.cc
 )
 elseif(WIN32)
 list(APPEND SRCS
+	src/manager_win.cc
 	src/storage_win.cc
 )
 endif()
