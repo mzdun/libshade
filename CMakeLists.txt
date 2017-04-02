@@ -24,9 +24,11 @@ set(PROJECT_VERSION_FULL ${PROJECT_VERSION}${PROJECT_VERSION_STABILITY}+${PROJEC
 
 set(SRCS
 	src/manager.cc
+	src/connection.cc
 	src/discovery.cc
 	src/storage.cc
 	inc/shade/manager.h
+	inc/shade/connection.h
 	inc/shade/discovery.h
 	inc/shade/network.h
 	inc/shade/storage.h
