@@ -2,7 +2,7 @@
 #include "tangle/msg/http_parser.h"
 #include "tangle/uri.h"
 
-#define DISCOVERY_TIMEOUT 3
+#define DISCOVERY_TIMEOUT 5
 #define STR2(x) #x
 #define STR(x) STR2(x)
 
@@ -111,7 +111,6 @@ namespace shade {
 				return;
 			}
 			if (length == 0) {
-				printf("DONE\n");
 				return;
 			}
 			handler->on_packet(data, length);
