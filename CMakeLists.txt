@@ -30,6 +30,7 @@ set(SRCS
 	inc/shade/discovery.h
 	inc/shade/network.h
 	inc/shade/storage.h
+	inc/shade/http.h
 )
 
 if (UNIX)
@@ -44,7 +45,9 @@ endif()
 
 set(ASIO_SRCS
 	src/asio/network.cc
+	src/asio/http.cc
 	inc/shade/asio/network.h
+	inc/shade/asio/http.h
 )
 
 set(TANGLE_SRCS
