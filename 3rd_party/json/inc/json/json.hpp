@@ -293,6 +293,7 @@ namespace json
 		}
 
 		vector& add(const value& v) { values().push_back(v); return *this; }
+		bool empty() const { return values().empty(); }
 		size_t size() const { return values().size(); }
 		iterator begin() { return values().begin(); }
 		iterator end() { return values().end(); }

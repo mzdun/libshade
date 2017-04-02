@@ -160,6 +160,45 @@ namespace json
 	CONTAINER_TRANSLATOR(std::vector);
 	CONTAINER_TRANSLATOR(std::list);
 
+	template <typename T, size_t length>
+	struct translator<std::array<T, length>> : base_translator {
+		using C = std::array<T, length>;
+
+		value pack(const void* ctx) const override {
+			vector out;
+			const C& container = *static_cast<const C*>(ctx);
+			for (auto&& item : container)
+				out.add(json::pack(item));
+			return out;
+		}
+
+		bool unpack(const value& v, void* ctx) const override {
+			auto in = get<VECTOR>(v);
+			C& out = *static_cast<C*>(ctx);
+
+			using value_t = typename C::value_type;
+
+			size_t index = 0;
+			translator<value_t> sub;
+			for (auto&& item : in) {
+				if (index == length)
+					return false;
+
+				if (!sub.unpack(item, &out[index]))
+					return false;
+
+				++index;
+			}
+
+			while (index < length) {
+				out[index] = value_t();
+				++index;
+			}
+
+			return true;
+		}
+	};
+
 	template <typename T, typename P>
 	struct member_translator : named_translator
 	{
@@ -185,6 +224,16 @@ namespace json
 		}
 	};
 
+	template <typename T>
+	inline bool is_empty(const T& val) {
+		return val == T();
+	}
+
+	template <typename T>
+	inline bool is_empty(const std::vector<T>& val) {
+		return val.empty();
+	}
+
 	template <typename T, typename P>
 	struct member_opt_translator : member_translator<T, P>
 	{
@@ -194,7 +243,7 @@ namespace json
 			auto __prop = member_translator<T, P>::m_prop;
 			auto ptr = static_cast<const T*>(ctx);
 			auto prop = ptr->*__prop;
-			return prop != P();
+			return !is_empty(prop);
 		}
 		bool optional() const override { return true; }
 
@@ -278,23 +327,22 @@ namespace json
 		}
 	};
 
-	template <typename T>
 	struct struct_translator: base_translator
 	{
 		using props_t = std::vector<std::unique_ptr<named_translator>>;
 		props_t m_props;
 
-		template <typename P>
+		template <typename P, typename T>
 		void add_prop(const std::string& name, P T::* prop) {
 			m_props.emplace_back(std::move(std::make_unique<member_translator<T, P>>(name, prop)));
 		}
 
-		template <typename P>
+		template <typename P, typename T>
 		void add_opt_prop(const std::string& name, P T::* prop) {
 			m_props.emplace_back(std::move(std::make_unique<member_opt_translator<T, P>>(name, prop)));
 		}
 
-		template <typename P>
+		template <typename P, typename T>
 		void add_item_prop(const std::string& name, P T::* prop) {
 			m_props.emplace_back(std::move(std::make_unique<member_item_translator<T, P>>(name, prop)));
 		}
@@ -336,25 +384,32 @@ namespace json
 
 #define JSON_STRUCT(name) \
 	template <> \
-	struct translator<name> : struct_translator<name>{ \
-		using sser = struct_translator<name>; \
+	struct translator<name> : struct_translator { \
+		using my_type = name; \
+		translator(); \
+	}; \
+	inline translator<name>::translator()
+
+#define JSON_STRUCT_(name, base) \
+	template <> \
+	struct translator<name> : translator<base>{ \
 		using my_type = name; \
 		translator(); \
 	}; \
 	inline translator<name>::translator()
 
 #define JSON_NAMED_PROP(name, prop) \
-	sser::add_prop(name, &my_type::prop)
+	this->add_prop(name, &my_type::prop)
 
 #define JSON_PROP(prop) JSON_NAMED_PROP(#prop, prop)
 
 #define JSON_OPT_NAMED_PROP(name, prop) \
-	sser::add_opt_prop(name, &my_type::prop)
+	this->add_opt_prop(name, &my_type::prop)
 
 #define JSON_OPT_PROP(prop) JSON_OPT_NAMED_PROP(#prop, prop)
 
 #define JSON_ITEM_NAMED_PROP(name, prop) \
-	sser::add_item_prop(name, &my_type::prop)
+	this->add_item_prop(name, &my_type::prop)
 
 #define JSON_ITEM_PROP(prop) JSON_ITEM_NAMED_PROP(#prop, prop)
 }

@@ -62,10 +62,10 @@ set(TANGLE_SRCS
 set(JSON_SRCS
 	3rd_party/json/src/json.cpp
 	3rd_party/json/src/utf8.cpp
-	3rd_party/json/src/utf8.hpp
 	3rd_party/json/inc/json.hpp
 	3rd_party/json/inc/json/json.hpp
 	3rd_party/json/inc/json/serdes.hpp
+	3rd_party/json/inc/utf8.hpp
 )
 
 if (WIN32)

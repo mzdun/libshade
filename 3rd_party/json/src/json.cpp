@@ -176,6 +176,7 @@ namespace json
 			JSON_FALSE,
 			JSON_STRING,
 			JSON_NUMBER,
+			JSON_FLOATING,
 			JSON_ARRAY_START,
 			JSON_ARRAY_END,
 			JSON_OBJECT_START,
@@ -195,7 +196,7 @@ namespace json
 			token_t err(const char* msg) const;
 			token_t tok(token t) const;
 			token_t str(const std::string&) const;
-			token_t num(const std::string&) const;
+			token_t num(const std::string&, bool integer) const;
 		};
 
 		struct token_t {
@@ -221,7 +222,7 @@ namespace json
 
 		token_t pos_t::tok(token t) const { return{ t, *this }; }
 		token_t pos_t::str(const std::string& s) const { return{ JSON_STRING, s, *this }; }
-		token_t pos_t::num(const std::string& s) const { return{ JSON_NUMBER, s, *this }; }
+		token_t pos_t::num(const std::string& s, bool integer) const { return{ integer ? JSON_NUMBER : JSON_FLOATING, s, *this }; }
 
 		struct input {
 			const char* m_cur;
@@ -230,7 +231,7 @@ namespace json
 
 			token_t tok(token t) const { return pos.tok(t); }
 			token_t str(const std::string& s) const { return pos.str(s); }
-			token_t num(const std::string& s) const { return pos.num(s); }
+			token_t num(const std::string& s, bool integer) const { return pos.num(s, integer); }
 
 			input& operator ++() {
 				if (*m_cur == '\n') pos.enter();
@@ -320,13 +321,29 @@ namespace json
 		token_t json_number(input& in) {
 			auto save = in.m_cur;
 			auto pos = in.pos;
+			bool integer = true;
 
 			if (in.cur() == '-')
 				++in;
 			while (in && std::isdigit((uint8_t)in.cur()))
 				++in;
+			if (in && in.cur() == '.') {
+				++in;
+				integer = false;
+				while (in && std::isdigit((uint8_t)in.cur()))
+					++in;
+			}
 
-			return pos.num({ save, in.m_cur });
+			if (in && (in.cur() == 'e' || in.cur() == 'E')) {
+				++in;
+				integer = false;
+				if (in && (in.cur() == '+' || in.cur() == '-'))
+					++in;
+				while (in && std::isdigit((uint8_t)in.cur()))
+					++in;
+			}
+
+			return pos.num({ save, in.m_cur }, integer);
 		}
 
 		token_t json_token(token t, const char* name, input& in) {
@@ -389,6 +406,7 @@ namespace json
 			case JSON_FALSE: return false;
 			case JSON_STRING: return tok.second;
 			case JSON_NUMBER: return (std::int64_t)std::stoll(tok.second);
+			case JSON_FLOATING: return std::stod(tok.second);
 			case JSON_ARRAY_START: return array(cur, end, error);
 			case JSON_OBJECT_START: return dict(cur, end, error);
 			default:
