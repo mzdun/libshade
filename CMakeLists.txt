@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.4)
-project(shade CXX)
+project(shade C CXX)
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_STATIC_RUNTIME ON)
 find_package(Boost 1.60 COMPONENTS system)
+find_package(Threads)
 
 include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -84,4 +85,4 @@ foreach(DEP shade shade-asio shade-tangle shade-json)
 	add_dependencies(shade-test ${DEP})
 	target_link_libraries(shade-test $<TARGET_FILE:${DEP}>)
 endforeach()
-target_link_libraries(shade-test ${Boost_LIBRARIES})
+target_link_libraries(shade-test ${Boost_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})

@@ -13,5 +13,6 @@ namespace shade { namespace asio {
 		network(io_service& service) : service_{ service } {}
 		std::unique_ptr<shade::udp> udp_socket() override;
 		std::unique_ptr<shade::tcp> tcp_socket() override;
+		std::unique_ptr<shade::timeout> timeout(milliseconds duration, std::function<void()> && cb) override;
 	};
 } }

@@ -138,4 +138,57 @@ namespace shade { namespace asio {
 	{
 		return std::make_unique<tcp>(service_);
 	}
+
+	class timer : public std::enable_shared_from_this<timer> {
+		deadline_timer timer_;
+		std::function<void()> cb_;
+	public:
+		timer(io_service& service, std::function<void()> && cb)
+			: timer_{ service }
+			, cb_{ std::move(cb) }
+		{}
+
+		bool start(milliseconds duration) {
+			error_code ec;
+			using posix = boost::posix_time::milliseconds;
+			timer_.expires_from_now(posix{duration.count()}, ec);
+			if (ec)
+				return false;
+
+			auto self = shared_from_this();
+			timer_.async_wait([self, this](const error_code& ec) {
+				if (ec)
+					return;
+				cb_();
+			});
+
+			return true;
+		}
+
+		void cancel() {
+			error_code ec;
+			timer_.cancel(ec);
+		}
+	};
+
+	class timeout_handler : public shade::timeout {
+		std::shared_ptr<timer> timer_;
+	public:
+		timeout_handler(const std::shared_ptr<timer>& timer)
+			: timer_{ timer }
+		{}
+		~timeout_handler()
+		{
+			timer_->cancel();
+		}
+	};
+
+	std::unique_ptr<shade::timeout> network::timeout(milliseconds duration, std::function<void()> && cb)
+	{
+		auto timer = std::make_shared<asio::timer>(service_, std::move(cb));
+		auto result = std::make_unique<timeout_handler>(timer);
+		if (!timer->start(duration))
+			return {};
+		return result;
+	}
 } }
