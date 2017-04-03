@@ -1,40 +1,5 @@
-#include <shade/manager.h>
-#include <shade/asio/network.h>
-#include <shade/asio/http.h>
+#include "client.h"
 #include <iostream>
-
-struct client : shade::manager::client {
-	std::unordered_map<std::string, shade::bridge_info> local_bridges_;
-	shade::manager* manager_ = nullptr;
-	void on_previous(std::unordered_map<std::string, shade::bridge_info> const&) override;
-	void on_bridge(std::string const& bridgeid, bool known) override;
-	void on_bridge_named(const std::string& bridgeid) override;
-	void on_connecting(std::string const& bridgeid) override;
-	void on_connected(std::string const& bridgeid) override;
-	void on_connect_timeout(std::string const& bridgeid) override;
-	void on_refresh(std::string const& bridgeid) override;
-};
-
-int main()
-{
-	boost::asio::io_service service;
-	shade::asio::network net{ service };
-	shade::asio::http browser{ service };
-
-	client events;
-	shade::manager hue{ &events, &net, &browser };
-	if (!hue.ready()) {
-		std::cout << "shade-test: could not setup the bridge discovery\n";
-		return 2;
-	}
-
-	events.manager_ = &hue;
-	hue.search();
-
-	shade::discovery bridges{ &net };
-
-	service.run();
-}
 
 void print(const shade::light_info& light, bool is_new)
 {

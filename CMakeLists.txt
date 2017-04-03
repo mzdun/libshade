@@ -27,7 +27,6 @@ set(SRCS
 	src/connection.cc
 	src/discovery.cc
 	src/storage.cc
-	src/manager_internal.h
 	inc/shade/manager.h
 	inc/shade/connection.h
 	inc/shade/discovery.h
@@ -77,6 +76,12 @@ set(JSON_SRCS
 	3rd_party/json/inc/utf8.hpp
 )
 
+set(CLI_SRCS
+	cli/main.cc
+	cli/client.cc
+	cli/client.h
+)
+
 if (WIN32)
 add_definitions(-D_WIN32_WINNT=0x0600)
 set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
@@ -88,9 +93,9 @@ add_library(shade-asio STATIC ${ASIO_SRCS})
 add_library(shade-tangle STATIC ${TANGLE_SRCS})
 add_library(shade-json STATIC ${JSON_SRCS})
 
-add_executable(shade-test playground/main.cc)
+add_executable(shade-cli ${CLI_SRCS})
 foreach(DEP shade shade-asio shade-tangle shade-json)
-	add_dependencies(shade-test ${DEP})
-	target_link_libraries(shade-test $<TARGET_FILE:${DEP}>)
+	add_dependencies(shade-cli ${DEP})
+	target_link_libraries(shade-cli $<TARGET_FILE:${DEP}>)
 endforeach()
-target_link_libraries(shade-test ${Boost_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(shade-cli ${Boost_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
