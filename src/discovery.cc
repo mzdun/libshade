@@ -32,10 +32,12 @@ namespace shade {
 	class discovery_handler {
 		discovery* parent;
 		discovery::onbridge callback;
+		discovery::ondone done;
 	public:
-		discovery_handler(discovery* parent, discovery::onbridge callback)
+		discovery_handler(discovery* parent, discovery::onbridge callback, discovery::ondone done)
 			: parent{ parent }
 			, callback{ std::move(callback) }
+			, done{ std::move(done) }
 		{
 		}
 
@@ -79,9 +81,14 @@ namespace shade {
 			// 6. for each bridge report the (id, base address) to callback
 			callback(bridgeid, base);
 		}
+
+		void on_done()
+		{
+			done();
+		}
 	};
 
-	bool discovery::search(onbridge callback)
+	bool discovery::search(onbridge callback, ondone done)
 	{
 		current_search_.reset();
 
@@ -104,13 +111,14 @@ namespace shade {
 			return false;
 
 		// 2. gather the (id, location) pair
-		auto handler = std::make_shared<discovery_handler>(this, std::move(callback));
+		auto handler = std::make_shared<discovery_handler>(this, std::move(callback), std::move(done));
 		current_search_ = udp_socket_->read_datagram(ssdp_timeout, [handler](const uint8_t* data, size_t length, bool success) {
 			if (!success) {
 				printf("FAILED\n");
 				return;
 			}
 			if (length == 0) {
+				handler->on_done();
 				return;
 			}
 			handler->on_packet(data, length);

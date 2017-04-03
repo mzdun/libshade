@@ -22,6 +22,7 @@ namespace shade {
 
 	public:
 		using onbridge = std::function<void(const std::string& id, const std::string& base)>;
+		using ondone = std::function<void()>;
 		discovery(network* net);
 		discovery(const discovery&) = delete;
 		discovery(discovery&&);
@@ -30,7 +31,7 @@ namespace shade {
 		~discovery();
 
 		bool ready() const { return connected_; }
-		bool search(onbridge callback);
+		bool search(onbridge callback, ondone done);
 
 		bool seen(const std::string& id, const std::string& location);
 		bool base_known(const std::string& id, const std::string& base);

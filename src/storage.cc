@@ -137,12 +137,14 @@ namespace shade {
 		auto it = known_bridges.find(id);
 		if (it == known_bridges.end()) {
 			auto& bridge = known_bridges[id];
+			bridge.seen = true;
 			bridge.name = name;
 			bridge.mac = mac;
 			bridge.modelid = modelid;
 			needs_storing = true;
 		} else {
 			auto& bridge = it->second;
+			bridge.seen = true;
 			if (bridge.name != name
 				|| bridge.mac != mac
 				|| bridge.modelid != modelid) {

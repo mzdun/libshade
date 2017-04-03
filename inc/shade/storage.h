@@ -96,6 +96,7 @@ namespace shade {
 #undef MEM_EQ
 
 	struct bridge_info {
+		bool seen = false;
 		std::string base;
 		std::string username;
 		std::string name;

@@ -21,13 +21,18 @@ namespace shade {
 
 		discovery_.search([this](std::string const& id, std::string const& base) {
 			const auto known = !storage_.bridge_located(id, base);
-			client_->on_bridge(id, known);
 
 			auto it = storage_.find(id);
 			if (it == storage_.end())
 				return;
 
 			get_config({ browser_, base, id });
+		}, [this] {
+			// retry all unactivated cached bridges
+			for (auto const& bridge : storage_) {
+				if (bridge.second.seen) continue;
+				get_config({ browser_, bridge.second.base, bridge.first });
+			}
 		});
 	}
 
@@ -57,6 +62,7 @@ namespace shade {
 		conn.get("/config", make_client([=](int status, json::value doc) {
 			api::config cfg;
 			if (unpack_json(cfg, doc)) {
+				client_->on_bridge(conn.id(), storage_.find(conn.id()) != storage_.end());
 				storage_.bridge_named(conn.id(), cfg.name, cfg.mac, cfg.modelid);
 				client_->on_bridge_named(conn.id());
 				auto it = storage_.find(conn.id());
