@@ -24,12 +24,21 @@ void print(const shade::group_info& group, bool is_new)
 	printf("\n");
 }
 
+client::client(boost::asio::io_service& service)
+	: menu_{ service }
+{
+}
+
 void client::on_previous(std::unordered_map<std::string, shade::bridge_info> const& bridges)
 {
 	if (bridges.empty()) {
 		printf("WAITING FOR BRIDGES...\n");
 	} else {
 		local_bridges_ = bridges;
+		for (auto& bridge : local_bridges_) {
+			bridge.second.selected.clear();
+		}
+
 		for (auto const& bridge : bridges) {
 			printf("BRIDGE %s:\n", bridge.first.c_str());
 			printf("    base:     %s\n", bridge.second.base.c_str());
@@ -50,6 +59,12 @@ void client::on_previous(std::unordered_map<std::string, shade::bridge_info> con
 					for (auto& ref : group.lights) {
 						printf("            -> %s\n", ref.c_str());
 					}
+				}
+			}
+			if (!bridge.second.selected.empty()) {
+				printf("    selected:\n");
+				for (auto const& ref : bridge.second.selected) {
+					printf("        -> %s\n", ref.c_str());
 				}
 			}
 		}
@@ -162,6 +177,227 @@ void print_list(T& local, const T& update, const char* title)
 	}
 }
 
+class first_screen : public menu::current {
+	client* parent_;
+	std::string title_;
+	std::vector<std::unique_ptr<menu::impl::item>> items_;
+
+	bool device_list_changed();
+	void rebuild_list();
+	template <typename C>
+	size_t count_devices(const C& list, const shade::bridge_info& bridge, size_t& distinct_bridges, bool& first)
+	{
+		size_t length = 0;
+		auto const& selected = bridge.selected;
+
+		for (auto const& item : list) {
+			if (!selected.count(item.id))
+				continue;
+			++length;
+
+			if (first) {
+				first = false;
+				title_ = distinct_bridges ? "Multiple bridges" : bridge.name;
+				++distinct_bridges;
+			}
+		}
+
+		return length;
+	}
+public:
+	first_screen(client* parent)
+		: parent_{ parent }
+	{
+	}
+
+	void refresh() override;
+	menu::label title() const override { return title_; }
+	size_t count() const override { return items_.size(); }
+	menu::item_type type(size_t i) override { return items_[i]->type(); }
+	menu::label text(size_t i) override { return items_[i]->text(); }
+	void call(size_t i) override { return items_[i]->call(); }
+};
+
+inline auto device_state(const std::string& text)
+{
+	return [=](int bri) {
+		constexpr int max_bri = 254;
+
+		std::string out;
+		out.reserve(2 + 4 + text.length());
+		out.push_back('[');
+		if (bri > max_bri) {
+			out.push_back(' ');
+			out.push_back('-');
+			out.push_back('-');
+			out.push_back(' ');
+		} else {
+			char buf[10];
+			sprintf(buf, "%3d%%", (bri * 100) / max_bri);
+			out.append(buf);
+		}
+		out.push_back(']');
+		out.push_back(' ');
+		out.append(text);
+		return out;
+	};
+}
+
+inline auto device_brightness(shade::manager* manager, const std::string& bridgeid, const std::string& deviceid)
+{
+	return [=]() -> int {
+		auto& bridge = manager->bridge(bridgeid);
+
+		for (auto const& item : bridge.groups) {
+			if (deviceid != item.id)
+				continue;
+			if (!item.state.on)
+				return 0x100;
+			return item.state.bri;
+		}
+
+		for (auto const& item : bridge.lights) {
+			if (deviceid != item.id)
+				continue;
+			if (!item.state.on)
+				return 0x100;
+			return item.state.bri;
+		}
+
+		return 0x100;
+	};
+}
+
+inline auto tick_out(const std::string& text)
+{
+	return [=](bool selected) {
+		std::string out;
+		out.reserve(5 + text.length());
+		out.push_back('[');
+		out.push_back(selected ? 'X' : ' ');
+		out.push_back(']');
+		out.push_back(' ');
+		out.append(text);
+		return out;
+	};
+}
+
+inline auto is_selected(shade::manager* manager, const std::string& bridgeid, const std::string& deviceid)
+{
+	return [=]() -> bool { return manager->is_selected(bridgeid, deviceid); };
+}
+
+void first_screen::refresh()
+{
+	if (device_list_changed()) {
+		rebuild_list();
+		return;
+	}
+
+	for (auto& item : items_)
+		item->refresh();
+}
+
+bool first_screen::device_list_changed()
+{
+	bool changed = false;
+	auto manager = parent_->manager_;
+	for (auto const& pair : manager->bridges()) {
+		auto& selected = pair.second.selected;
+		auto& local = parent_->local_bridges_[pair.first].selected;
+
+		if (selected != local) {
+			local = selected;
+			changed = true;
+		}
+	}
+
+	return changed;
+}
+
+void first_screen::rebuild_list()
+{
+	using namespace menu::impl;
+	auto manager = parent_->manager_;
+
+	title_.clear();
+
+	std::vector<std::unique_ptr<item>> items;
+	size_t length = 0;
+	size_t distinct_bridges = 0;
+	for (auto const& pair : manager->bridges()) {
+		auto const& bridgeid = pair.first;
+		auto const& bridge = pair.second;
+
+		auto first = true;
+
+		length += count_devices(bridge.groups, bridge, distinct_bridges, first);
+		length += count_devices(bridge.lights, bridge, distinct_bridges, first);
+	}
+	items.reserve(length + 2);
+
+	struct counter {
+		bool first = true;
+		void set(int& devices, std::string& title, const shade::bridge_info& bridge) {
+			if (first) {
+				first = false;
+				title = devices ? "Multiple bridges" : bridge.name;
+				++devices;
+			}
+		}
+	};
+	int devices = 0;
+	for (auto const& pair : manager->bridges()) {
+		auto bridgeid = pair.first;
+		auto const& bridge = pair.second;
+		counter cnt;
+
+		for (auto const& group : bridge.groups) {
+			auto id = group.id;
+			if (!bridge.selected.count(id))
+				continue;
+
+			cnt.set(devices, title_, bridge);
+			items.push_back(item::simple(
+				device_brightness(manager, bridgeid, id),
+				device_state(group.name),
+				[=]() {}
+			));
+		}
+	}
+	items.push_back(item::separator());
+	for (auto const& pair : manager->bridges()) {
+		auto bridgeid = pair.first;
+		auto const& bridge = pair.second;
+		counter cnt;
+
+		for (auto const& light : bridge.lights) {
+			auto id = light.id;
+			if (!bridge.selected.count(id))
+				continue;
+
+			cnt.set(devices, title_, bridge);
+			items.push_back(item::simple(
+				device_brightness(manager, bridgeid, id),
+				device_state(light.name),
+				[=]() {}
+			));
+		}
+	}
+
+	if (!devices)
+		title_ = "Choose devices";
+
+	auto dummy = std::make_shared<bool>(true);
+	items.push_back(item::special(
+		[dummy]() { return false; },
+		tick_out("Refresh state"),
+		[dummy]() {}));
+	items.push_back(item::special("Select devices", [this]() { parent_->select_items(); }));
+
+	items_.swap(items);
+}
+
 void client::on_refresh(std::string const& bridgeid)
 {
 	auto const& bridge = manager_->bridge(bridgeid);
@@ -169,4 +405,48 @@ void client::on_refresh(std::string const& bridgeid)
 	printf("... >> GOT CURRENT CONFIG\n");
 	print_list(local.lights, bridge.lights, "lights");
 	print_list(local.groups, bridge.groups, "groups");
+
+	menu_.show_menu(std::make_unique<first_screen>(this));
+}
+
+void client::select_items()
+{
+	using namespace menu::impl;
+	std::vector<std::unique_ptr<item>> items;
+	size_t length = 0;
+	for (auto const& bridge : manager_->bridges()) {
+		length += bridge.second.groups.size();
+		length += bridge.second.lights.size();
+	}
+	items.reserve(length + 1);
+
+	for (auto const& bridge : manager_->bridges()) {
+		auto bridgeid = bridge.first;
+		for (auto const& group : bridge.second.groups) {
+			auto id = group.id;
+			items.push_back(item::simple(
+				is_selected(manager_, bridgeid, id),
+				tick_out(group.name),
+				[=]() { switch_device(bridgeid, id); }
+			));
+		}
+	}
+	items.push_back(item::separator());
+	for (auto const& bridge : manager_->bridges()) {
+		auto bridgeid = bridge.first;
+		for (auto const& light : bridge.second.lights) {
+			auto id = light.id;
+			items.push_back(item::simple(
+				is_selected(manager_, bridgeid, id),
+				tick_out(light.name),
+				[=]() { switch_device(bridgeid, id); }
+			));
+		}
+	}
+	menu_.show_menu(std::make_unique<current<>>("Select devices", std::move(items)));
+}
+
+void client::switch_device(const std::string& bridgeid, const std::string& id)
+{
+	manager_->switch_selection(bridgeid, id);
 }

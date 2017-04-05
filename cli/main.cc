@@ -3,16 +3,15 @@
 #include <shade/asio/http.h>
 #include <iostream>
 
-int main()
-{
+int main() try {
 	boost::asio::io_service service;
 	shade::asio::network net{ service };
 	shade::asio::http browser{ service };
 
-	client events;
+	client events{ service };
 	shade::manager hue{ &events, &net, &browser };
 	if (!hue.ready()) {
-		std::cout << "shade-test: could not setup the bridge discovery\n";
+		std::cout << "shade-cli: could not setup the bridge discovery\n";
 		return 2;
 	}
 
@@ -20,4 +19,6 @@ int main()
 	hue.search();
 
 	service.run();
+} catch (std::exception const & ex) {
+	printf("shade-cli: %s\n", ex.what());
 }
