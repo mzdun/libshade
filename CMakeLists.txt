@@ -79,7 +79,9 @@ set(JSON_SRCS
 set(CLI_SRCS
 	cli/main.cc
 	cli/client.cc
+	cli/menu.cc
 	cli/client.h
+	cli/menu.h
 )
 
 if (WIN32)
