@@ -26,6 +26,7 @@
 #define __JSON_SERDES_HPP__
 
 #include <stdint.h>
+#include <unordered_set>
 
 namespace json
 {
@@ -104,6 +105,35 @@ namespace json
 					return false;
 
 				out.push_back(new_ctx);
+			}
+
+			return true;
+		}
+	};
+
+	template <typename T>
+	struct translator<std::unordered_set<T>> : base_translator
+	{
+		value pack(const void* ctx) const override {
+			vector out;
+			const std::unordered_set<T>& container = *static_cast<const std::unordered_set<T>*>(ctx);
+			for (auto&& item : container)
+				out.add(json::pack(item));
+			return out;
+		}
+
+		bool unpack(const value& v, void* ctx) const override {
+			auto in = get<VECTOR>(v);
+			std::unordered_set<T>& out = *static_cast<std::unordered_set<T>*>(ctx);
+			out.clear();
+
+			translator<T> sub;
+			for (auto&& item : in) {
+				T new_ctx;
+				if (!sub.unpack(item, &new_ctx))
+					return false;
+
+				out.insert(new_ctx);
 			}
 
 			return true;
