@@ -42,6 +42,7 @@ namespace json {
 		JSON_OPT_PROP(modelid);
 		JSON_OPT_PROP(lights);
 		JSON_OPT_PROP(groups);
+		JSON_OPT_PROP(selected);
 	}
 }
 
@@ -110,6 +111,29 @@ namespace shade {
 		if (!out)
 			return;
 		fprintf(out.get(), "%s\n", text.c_str());
+	}
+
+	bool storage::is_selected(const std::string& id, const std::string& dev) const
+	{
+		auto it = known_bridges.find(id);
+		if (it == known_bridges.end())
+			return false;
+		return it->second.selected.count(dev) > 0;
+	}
+
+	void storage::switch_selection(const std::string& id, const std::string& dev)
+	{
+		auto it = known_bridges.find(id);
+		if (it == known_bridges.end())
+			return;
+
+		auto sel = it->second.selected.find(dev);
+		if (sel == it->second.selected.end())
+			it->second.selected.insert(dev);
+		else
+			it->second.selected.erase(dev);
+
+		store();
 	}
 
 	bool storage::bridge_located(const std::string& id, const std::string& base) {

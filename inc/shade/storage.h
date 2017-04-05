@@ -2,6 +2,7 @@
 #include <array>
 #include <functional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace shade {
@@ -104,6 +105,7 @@ namespace shade {
 		std::string modelid;
 		std::vector<light_info> lights;
 		std::vector<group_info> groups;
+		std::unordered_set<std::string> selected;
 	};
 
 	class store_at_exit;
@@ -123,6 +125,10 @@ namespace shade {
 		auto find(const std::string& id) const { return known_bridges.find(id); }
 		auto begin() const { return known_bridges.begin(); }
 		auto end() const { return known_bridges.end(); }
+
+		bool is_selected(const std::string& id, const std::string& dev) const;
+		void switch_selection(const std::string& id, const std::string& dev);
+
 		bool bridge_located(const std::string& id, const std::string& base);
 		void bridge_named(const std::string& id, const std::string& name, const std::string& mac, const std::string& modelid);
 		void bridge_connected(const std::string& id, const std::string& username);

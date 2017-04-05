@@ -31,6 +31,10 @@ namespace shade {
 		bool ready() const { return discovery_.ready(); }
 		void search();
 		const bridge_info& bridge(const std::string& bridgeid) const;
+		const std::unordered_map<std::string, bridge_info>& bridges() const { return storage_.bridges(); }
+
+		bool is_selected(const std::string& id, const std::string& dev) const { return storage_.is_selected(id, dev); }
+		void switch_selection(const std::string& id, const std::string& dev) { storage_.switch_selection(id, dev); }
 	private:
 		client* client_;
 		network* net_;
