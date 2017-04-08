@@ -7,10 +7,11 @@
 using namespace std::literals;
 
 namespace shade {
-	manager::manager(client* client, network* net, http* browser)
+	manager::manager(const std::string& name, client* client, network* net, http* browser)
 		: client_{ client }
 		, net_{ net }
 		, browser_{ browser }
+		, storage_{ name }
 	{
 		storage_.load();
 	}
@@ -31,7 +32,7 @@ namespace shade {
 			// retry all unactivated cached bridges
 			for (auto const& bridge : storage_) {
 				if (bridge.second.seen) continue;
-				get_config({ browser_, bridge.second.base, bridge.first });
+				get_config({ browser_, bridge.second.hw.base, bridge.first });
 			}
 		});
 	}
@@ -69,7 +70,7 @@ namespace shade {
 				if (it == storage_.end())
 					return;
 
-				auto const& username = it->second.username;
+				auto const& username = it->second.get_current()->username();
 				if (username.empty())
 					create_user(conn);
 				else
@@ -95,12 +96,41 @@ namespace shade {
 	}
 
 	std::string machine();
-	std::string userdefinition() {
+	std::string userdefinition(const std::string& client) {
 		auto name = machine();
 		if (name.empty())
-			return R"({"devicetype": "libshade#unknown"})";
+			name = "unknown";
 
-		return json::map{}.add("devicetype", "libshade#" + name).to_string();
+		return json::map{}.add("devicetype", client + "#" + name).to_string();
+	}
+
+	void manager::get_user(const connection& conn, int status, json::value doc, std::chrono::nanoseconds sofar, std::chrono::steady_clock::time_point then) {
+		if (status / 100 < 4) {
+			auto value = get_username(doc);
+			if (value.is<json::STRING>()) {
+				auto username = value.as<json::STRING>();
+				storage_.bridge_connected(conn.id(), username);
+				client_->on_connected(conn.id());
+				get_lights(conn.logged(username));
+				return;
+			}
+		}
+
+		api::errors error;
+		if (get_error(error, doc)) {
+			if (error == api::errors::button_not_pressed) {
+				auto& timeout = timeouts_[conn.id()];
+				timeout = net_->timeout(300ms, [=]() {
+					timeouts_.erase(conn.id());
+					auto now = std::chrono::steady_clock::now();
+					create_user(conn, sofar + (now - then));
+				});
+
+				if (timeout)
+					return;
+			}
+		}
+		client_->on_connect_timeout(conn.id());
 	}
 
 	void manager::create_user(const connection& conn, std::chrono::nanoseconds sofar)
@@ -111,33 +141,9 @@ namespace shade {
 		}
 
 		auto then = std::chrono::steady_clock::now();
-		conn.post("", userdefinition(), make_json_client([=](int status, json::value doc) {
-			if (status / 100 < 4) {
-				auto value = get_username(doc);
-				if (value.is<json::STRING>()) {
-					auto username = value.as<json::STRING>();
-					storage_.bridge_connected(conn.id(), username);
-					client_->on_connected(conn.id());
-					get_lights(conn.logged(username));
-					return;
-				}
-			}
-
-			api::errors error;
-			if (get_error(error, doc)) {
-				if (error == api::errors::button_not_pressed) {
-					auto& timeout = timeouts_[conn.id()];
-					timeout = net_->timeout(300ms, [=]() {
-						timeouts_.erase(conn.id());
-						auto now = std::chrono::steady_clock::now();
-						create_user(conn, sofar + (now - then));
-					});
-
-					if (timeout)
-						return;
-				}
-			}
-			client_->on_connect_timeout(conn.id());
+		auto json = userdefinition(storage_.current_client());
+		conn.post("", json, make_json_client([=](int status, json::value doc) {
+			get_user(conn, status, doc, sofar, then);
 		}));
 	}
 

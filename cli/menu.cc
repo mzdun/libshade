@@ -28,7 +28,11 @@ namespace menu {
 #endif
 
 	control::control(boost::asio::io_service& service)
+#if defined(BOOST_ASIO_HAS_POSIX_STREAM_DESCRIPTOR)
 		: io_{ service, os_stdin() }
+#else
+		: io_{ service }
+#endif
 	{
 	}
 

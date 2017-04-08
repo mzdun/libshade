@@ -5,6 +5,10 @@
 #include <unordered_set>
 #include <vector>
 
+namespace json {
+	struct struct_translator;
+}
+
 namespace shade {
 	struct light_state {
 		bool on;
@@ -34,6 +38,13 @@ namespace shade {
 		std::string klass;
 		group_state state;
 		std::vector<std::string> lights;
+	};
+
+	struct hw_info {
+		std::string base;
+		std::string name;
+		std::string mac;
+		std::string modelid;
 	};
 
 #define MEM_EQ(name) (lhs.name == rhs.name)
@@ -93,24 +104,73 @@ namespace shade {
 		return !(lhs == rhs);
 	}
 
+	inline bool operator == (hw_info const& lhs, hw_info const& rhs) {
+		return MEM_EQ(base)
+			&& MEM_EQ(name)
+			&& MEM_EQ(mac)
+			&& MEM_EQ(modelid);
+	}
+
+	inline bool operator != (hw_info const& lhs, hw_info const& rhs) {
+		return !(lhs == rhs);
+	}
+
 #undef BASE_EQ
 #undef MEM_EQ
 
-	struct bridge_info {
-		bool seen = false;
-		std::string base;
-		std::string username;
-		std::string name;
-		std::string mac;
-		std::string modelid;
-		std::vector<light_info> lights;
-		std::vector<group_info> groups;
-		std::unordered_set<std::string> selected;
+	class storage;
+
+	class updateable {
+		storage* stg_ = nullptr;
+	public:
+		void set(storage* stg) { stg_ = stg; }
+	protected:
+		updateable() = default;
+		updateable(storage* stg) : stg_{ stg } {}
+		inline void store();
 	};
 
-	class store_at_exit;
+	class client : public updateable {
+		std::string name_;
+		std::string username_;
+		std::unordered_set<std::string> selected_;
+	public:
+		client() = default;
+		client(const std::string& name) : name_{ name } {}
+		static void prepare(json::struct_translator&);
+
+		const std::string& name() const { return name_; }
+		const std::string& username() const { return username_; }
+		auto const& selected() const { return selected_; }
+		void batch_update(const std::unordered_set<std::string>& upstream) {
+			selected_ = upstream;
+		}
+
+		bool update(const std::string& user);
+		bool is_selected(const std::string& dev) const;
+		void switch_selection(const std::string& dev);
+		void clear_selection() { selected_.clear(); }
+	};
+
+	struct bridge_info {
+		bool seen = false;
+		hw_info hw;
+		std::vector<light_info> lights;
+		std::vector<group_info> groups;
+
+		static void prepare(json::struct_translator&);
+
+		void set_client(const std::string& name, storage* stg);
+		void rebind_current();
+		client* get_current() const { return current_; }
+	private:
+		client* current_ = nullptr;
+		std::vector<client> clients_;
+	};
+
 	class storage {
-		friend class store_at_exit;
+		std::string clientid;
+		client* current = nullptr;
 		std::unordered_map<std::string, bridge_info> known_bridges;
 		static constexpr char confname[] = ".shade.cfg";
 		static std::string build_filename();
@@ -118,16 +178,15 @@ namespace shade {
 			static auto name = build_filename();
 			return name;
 		}
-		void store();
 	public:
+		storage(const std::string& client) : clientid{ client } {}
+		const std::string& current_client() const { return clientid; }
 		void load();
+		void store();
 		auto const& bridges() const { return known_bridges; }
 		auto find(const std::string& id) const { return known_bridges.find(id); }
 		auto begin() const { return known_bridges.begin(); }
 		auto end() const { return known_bridges.end(); }
-
-		bool is_selected(const std::string& id, const std::string& dev) const;
-		void switch_selection(const std::string& id, const std::string& dev);
 
 		bool bridge_located(const std::string& id, const std::string& base);
 		void bridge_named(const std::string& id, const std::string& name, const std::string& mac, const std::string& modelid);
@@ -136,4 +195,9 @@ namespace shade {
 			std::vector<light_info> lights,
 			std::vector<group_info> groups);
 	};
+
+	inline void updateable::store()
+	{
+		stg_->store();
+	}
 }

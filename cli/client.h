@@ -21,5 +21,4 @@ struct client : shade::manager::client {
 
 private:
 	void select_items();
-	void switch_device(const std::string& bridgeid, const std::string& id);
 };

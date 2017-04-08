@@ -9,7 +9,7 @@ int main() try {
 	shade::asio::http browser{ service };
 
 	client events{ service };
-	shade::manager hue{ &events, &net, &browser };
+	shade::manager hue{ "shade-cli", &events, &net, &browser };
 	if (!hue.ready()) {
 		std::cout << "shade-cli: could not setup the bridge discovery\n";
 		return 2;

@@ -36,16 +36,20 @@ void client::on_previous(std::unordered_map<std::string, shade::bridge_info> con
 	} else {
 		local_bridges_ = bridges;
 		for (auto& bridge : local_bridges_) {
-			bridge.second.selected.clear();
+			bridge.second.rebind_current();
+			bridge.second.get_current()->clear_selection();
 		}
 
 		for (auto const& bridge : bridges) {
 			printf("BRIDGE %s:\n", bridge.first.c_str());
-			printf("    base:     %s\n", bridge.second.base.c_str());
-			printf("    username: %s\n", bridge.second.username.c_str());
-			printf("    name:     %s\n", bridge.second.name.c_str());
-			printf("    mac:      %s\n", bridge.second.mac.c_str());
-			printf("    modelid:  %s\n", bridge.second.modelid.c_str());
+			auto & hw = bridge.second.hw;
+			auto & client = *bridge.second.get_current();
+			printf("    base:     %s\n", hw.base.c_str());
+			printf("    name:     %s\n", hw.name.c_str());
+			printf("    mac:      %s\n", hw.mac.c_str());
+			printf("    modelid:  %s\n", hw.modelid.c_str());
+			printf("    client:   %s\n", client.name().c_str());
+			printf("    username: %s\n", client.username().c_str());
 			if (!bridge.second.lights.empty()) {
 				printf("    lights:\n");
 				for (auto const& light : bridge.second.lights) {
@@ -61,11 +65,10 @@ void client::on_previous(std::unordered_map<std::string, shade::bridge_info> con
 					}
 				}
 			}
-			if (!bridge.second.selected.empty()) {
+			if (!client.selected().empty()) {
 				printf("    selected:\n");
-				for (auto const& ref : bridge.second.selected) {
+				for (auto const& ref : client.selected())
 					printf("        -> %s\n", ref.c_str());
-				}
 			}
 		}
 	}
@@ -76,9 +79,9 @@ void client::on_bridge(std::string const& bridgeid, bool known)
 	auto const& bridge = manager_->bridge(bridgeid);
 	auto& local = local_bridges_[bridgeid];
 	printf("... >> %s %s\n", known ? "ACTIVATING" : "FOUND", bridgeid.c_str());
-	if (bridge.base != local.base) {
-		printf("    base: [%s]\n", bridge.base.c_str());
-		local.base = bridge.base;
+	if (bridge.hw.base != local.hw.base) {
+		printf("    base: [%s]\n", bridge.hw.base.c_str());
+		local.hw.base = bridge.hw.base;
 	}
 }
 
@@ -87,17 +90,17 @@ void client::on_bridge_named(std::string const& bridgeid)
 	auto const& bridge = manager_->bridge(bridgeid);
 	auto& local = local_bridges_[bridgeid];
 	printf("... >> GOT BASIC CONFIG\n");
-	if (bridge.name != local.name) {
-		printf("    name: [%s]\n", bridge.name.c_str());
-		local.name = bridge.name;
+	if (bridge.hw.name != local.hw.name) {
+		printf("    name: [%s]\n", bridge.hw.name.c_str());
+		local.hw.name = bridge.hw.name;
 	}
-	if (bridge.mac != local.mac) {
-		printf("    mac: [%s]\n", bridge.mac.c_str());
-		local.mac = bridge.mac;
+	if (bridge.hw.mac != local.hw.mac) {
+		printf("    mac: [%s]\n", bridge.hw.mac.c_str());
+		local.hw.mac = bridge.hw.mac;
 	}
-	if (bridge.modelid != local.modelid) {
-		printf("    modelid: [%s]\n", bridge.modelid.c_str());
-		local.modelid = bridge.modelid;
+	if (bridge.hw.modelid != local.hw.modelid) {
+		printf("    modelid: [%s]\n", bridge.hw.modelid.c_str());
+		local.hw.modelid = bridge.hw.modelid;
 	}
 }
 
@@ -108,10 +111,9 @@ void client::on_connecting(std::string const&)
 
 void client::on_connected(std::string const& bridgeid)
 {
-	auto const& bridge = manager_->bridge(bridgeid);
-	auto& local = local_bridges_[bridgeid];
+	auto& bridge = manager_->bridge(bridgeid);
 	printf("THANK YOU.\n");
-	printf("    username: [%s]\n", bridge.username.c_str());
+	printf("    username: [%s]\n", bridge.get_current()->username().c_str());
 }
 
 void client::on_connect_timeout(std::string const& bridgeid)
@@ -185,21 +187,15 @@ class first_screen : public menu::current {
 	bool device_list_changed();
 	void rebuild_list();
 	template <typename C>
-	size_t count_devices(const C& list, const shade::bridge_info& bridge, size_t& distinct_bridges, bool& first)
+	size_t count_devices(const C& list, const shade::client& client, const shade::hw_info& hw, size_t& distinct_bridges)
 	{
 		size_t length = 0;
-		auto const& selected = bridge.selected;
+		auto const& selected = client.selected();
 
 		for (auto const& item : list) {
 			if (!selected.count(item.id))
 				continue;
 			++length;
-
-			if (first) {
-				first = false;
-				title_ = distinct_bridges ? "Multiple bridges" : bridge.name;
-				++distinct_bridges;
-			}
 		}
 
 		return length;
@@ -208,6 +204,7 @@ public:
 	first_screen(client* parent)
 		: parent_{ parent }
 	{
+		rebuild_list();
 	}
 
 	void refresh() override;
@@ -282,9 +279,9 @@ inline auto tick_out(const std::string& text)
 	};
 }
 
-inline auto is_selected(shade::manager* manager, const std::string& bridgeid, const std::string& deviceid)
+inline auto is_selected(shade::client* client, const std::string& deviceid)
 {
-	return [=]() -> bool { return manager->is_selected(bridgeid, deviceid); };
+	return [=]() -> bool { return client->is_selected(deviceid); };
 }
 
 void first_screen::refresh()
@@ -303,11 +300,13 @@ bool first_screen::device_list_changed()
 	bool changed = false;
 	auto manager = parent_->manager_;
 	for (auto const& pair : manager->bridges()) {
-		auto& selected = pair.second.selected;
-		auto& local = parent_->local_bridges_[pair.first].selected;
+		auto& local_bridge = parent_->local_bridges_[pair.first];
+		auto const& client = parent_->manager_->current_client();
+		auto& selected = pair.second.get_current()->selected();
+		auto& local = local_bridge.get_current()->selected();
 
 		if (selected != local) {
-			local = selected;
+			local_bridge.get_current()->batch_update(selected);
 			changed = true;
 		}
 	}
@@ -329,10 +328,9 @@ void first_screen::rebuild_list()
 		auto const& bridgeid = pair.first;
 		auto const& bridge = pair.second;
 
-		auto first = true;
-
-		length += count_devices(bridge.groups, bridge, distinct_bridges, first);
-		length += count_devices(bridge.lights, bridge, distinct_bridges, first);
+		auto const& client = *bridge.get_current();
+		length += count_devices(bridge.groups, client, bridge.hw, distinct_bridges);
+		length += count_devices(bridge.lights, client, bridge.hw, distinct_bridges);
 	}
 	items.reserve(length + 2);
 
@@ -341,20 +339,22 @@ void first_screen::rebuild_list()
 		void set(int& devices, std::string& title, const shade::bridge_info& bridge) {
 			if (first) {
 				first = false;
-				title = devices ? "Multiple bridges" : bridge.name;
+				title = devices ? "Multiple bridges" : bridge.hw.name;
 				++devices;
 			}
 		}
 	};
 	int devices = 0;
+	std::unordered_set<std::string> dummy;
 	for (auto const& pair : manager->bridges()) {
 		auto bridgeid = pair.first;
 		auto const& bridge = pair.second;
+		auto const& selection = bridge.get_current()->selected();
 		counter cnt;
 
 		for (auto const& group : bridge.groups) {
 			auto id = group.id;
-			if (!bridge.selected.count(id))
+			if (!selection.count(id))
 				continue;
 
 			cnt.set(devices, title_, bridge);
@@ -369,11 +369,12 @@ void first_screen::rebuild_list()
 	for (auto const& pair : manager->bridges()) {
 		auto bridgeid = pair.first;
 		auto const& bridge = pair.second;
+		auto const& selection = bridge.get_current()->selected();
 		counter cnt;
 
 		for (auto const& light : bridge.lights) {
 			auto id = light.id;
-			if (!bridge.selected.count(id))
+			if (!selection.count(id))
 				continue;
 
 			cnt.set(devices, title_, bridge);
@@ -388,11 +389,10 @@ void first_screen::rebuild_list()
 	if (!devices)
 		title_ = "Choose devices";
 
-	auto dummy = std::make_shared<bool>(true);
 	items.push_back(item::special(
-		[dummy]() { return false; },
+		[]() { return false; },
 		tick_out("Refresh state"),
-		[dummy]() {}));
+		[]() {}));
 	items.push_back(item::special("Select devices", [this]() { parent_->select_items(); }));
 
 	items_.swap(items);
@@ -420,33 +420,28 @@ void client::select_items()
 	}
 	items.reserve(length + 1);
 
-	for (auto const& bridge : manager_->bridges()) {
-		auto bridgeid = bridge.first;
+	for (auto& bridge : manager_->bridges()) {
+		auto client = bridge.second.get_current();
 		for (auto const& group : bridge.second.groups) {
 			auto id = group.id;
 			items.push_back(item::simple(
-				is_selected(manager_, bridgeid, id),
+				is_selected(client, id),
 				tick_out(group.name),
-				[=]() { switch_device(bridgeid, id); }
+				[=]() { client->switch_selection(id); }
 			));
 		}
 	}
 	items.push_back(item::separator());
 	for (auto const& bridge : manager_->bridges()) {
-		auto bridgeid = bridge.first;
+		auto client = bridge.second.get_current();
 		for (auto const& light : bridge.second.lights) {
 			auto id = light.id;
 			items.push_back(item::simple(
-				is_selected(manager_, bridgeid, id),
+				is_selected(client, id),
 				tick_out(light.name),
-				[=]() { switch_device(bridgeid, id); }
+				[=]() { client->switch_selection(id); }
 			));
 		}
 	}
 	menu_.show_menu(std::make_unique<current<>>("Select devices", std::move(items)));
-}
-
-void client::switch_device(const std::string& bridgeid, const std::string& id)
-{
-	manager_->switch_selection(bridgeid, id);
 }

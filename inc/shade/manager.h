@@ -26,15 +26,13 @@ namespace shade {
 			virtual void on_refresh(std::string const& bridgeid) = 0;
 		};
 
-		manager(client* client, network* net, http* browser);
+		manager(const std::string& name, client* client, network* net, http* browser);
 
+		const auto& current_client() const { return storage_.current_client(); }
 		bool ready() const { return discovery_.ready(); }
 		void search();
 		const bridge_info& bridge(const std::string& bridgeid) const;
 		const std::unordered_map<std::string, bridge_info>& bridges() const { return storage_.bridges(); }
-
-		bool is_selected(const std::string& id, const std::string& dev) const { return storage_.is_selected(id, dev); }
-		void switch_selection(const std::string& id, const std::string& dev) { storage_.switch_selection(id, dev); }
 	private:
 		client* client_;
 		network* net_;
@@ -48,6 +46,7 @@ namespace shade {
 		void get_config(const connection& conn);
 		void create_user(const connection& conn);
 		void create_user(const connection& conn, std::chrono::nanoseconds sofar);
+		void get_user(const connection& conn, int status, json::value doc, std::chrono::nanoseconds sofar, std::chrono::steady_clock::time_point then);
 		void get_lights(const connection& conn);
 		void get_groups(const connection& conn, std::unordered_map<std::string, api::light> lights);
 		void add_config(const std::string& bridgeid, std::unordered_map<std::string, api::light> lights, std::unordered_map<std::string, api::group> groups);

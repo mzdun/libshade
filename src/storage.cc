@@ -1,7 +1,32 @@
 #include "shade/storage.h"
 #include "json.hpp"
+#include <algorithm>
 #include <cstdio>
 #include <memory>
+
+#define JSON_STATIC_DECL(name) \
+	template <> \
+	struct translator<name> : struct_translator { \
+		using my_type = name; \
+		translator() { my_type::prepare(*this); } \
+	}
+
+#define NAMED_PROP(name, prop) \
+	add_prop(name, &my_type::prop)
+
+#define PROP(prop) NAMED_PROP(#prop, prop)
+#define PRIV_PROP(prop) NAMED_PROP(#prop, prop ## _)
+
+#define OPT_NAMED_PROP(name, prop) \
+	add_opt_prop(name, &my_type::prop)
+
+#define OPT_PROP(prop) OPT_NAMED_PROP(#prop, prop)
+#define OPT_PRIV_PROP(prop) OPT_NAMED_PROP(#prop, prop ## _)
+
+#define ITEM_NAMED_PROP(name, prop) \
+	add_item_prop(name, &my_type::prop)
+
+#define ITEM_PROP(prop) ITEM_NAMED_PROP(#prop, prop)
 
 namespace json {
 	JSON_STRUCT(shade::light_state) {
@@ -34,16 +59,15 @@ namespace json {
 		JSON_PROP(lights);
 	};
 
-	JSON_STRUCT(shade::bridge_info) {
+	JSON_STRUCT(shade::hw_info) {
 		JSON_PROP(base);
-		JSON_OPT_PROP(username);
 		JSON_OPT_PROP(name);
 		JSON_OPT_PROP(mac);
 		JSON_OPT_PROP(modelid);
-		JSON_OPT_PROP(lights);
-		JSON_OPT_PROP(groups);
-		JSON_OPT_PROP(selected);
 	}
+
+	JSON_STATIC_DECL(shade::client);
+	JSON_STATIC_DECL(shade::bridge_info);
 }
 
 namespace shade {
@@ -66,6 +90,72 @@ namespace shade {
 			return store;
 		}
 	};
+
+	void client::prepare(json::struct_translator& tr)
+	{
+		using my_type = client;
+		tr.OPT_PRIV_PROP(name);
+		tr.OPT_PRIV_PROP(username);
+		tr.OPT_PRIV_PROP(selected);
+	}
+
+	bool client::update(const std::string& user)
+	{
+		if (username_ == user)
+			return false;
+		username_ = user;
+		return true;
+	}
+
+	bool client::is_selected(const std::string& dev) const
+	{
+		return selected_.count(dev) > 0;
+	}
+
+	void client::switch_selection(const std::string& dev)
+	{
+		auto sel = selected_.find(dev);
+		if (sel == selected_.end())
+			selected_.insert(dev);
+		else
+			selected_.erase(dev);
+
+		store();
+	}
+
+	void bridge_info::prepare(json::struct_translator& tr)
+	{
+		using my_type = bridge_info;
+		tr.PROP(hw);
+		tr.OPT_PROP(lights);
+		tr.OPT_PROP(groups);
+		tr.OPT_PRIV_PROP(clients);
+	}
+
+	void bridge_info::set_client(const std::string& name, storage* stg)
+	{
+		using std::begin;
+		using std::end;
+
+		auto it = std::find_if(begin(clients_), end(clients_),
+			[&](const auto& cli) { return cli.name() == name; });
+		if (it == end(clients_))
+			it = clients_.insert(end(clients_), client{ name });
+		current_ = &*it;
+		current_->set(stg);
+	}
+
+	void bridge_info::rebind_current()
+	{
+		using std::begin;
+		using std::end;
+
+		auto name = current_->name();
+
+		auto it = std::find_if(begin(clients_), end(clients_),
+			[&](const auto& cli) { return cli.name() == name; });
+		current_ = &*it;
+	}
 
 	struct file {
 		struct closer {
@@ -95,11 +185,14 @@ namespace shade {
 			return;
 
 		auto object = json::from_string(contents(in.get()));
-		if (!object.is<json::MAP>())
-			return;
-
-		if (!json::unpack(known_bridges, object))
+		if (!json::unpack(known_bridges, object)) {
 			known_bridges.clear();
+			return;
+		}
+
+		for (auto& pair : known_bridges) {
+			pair.second.set_client(clientid, this);
+		}
 	}
 
 	void storage::store()
@@ -113,38 +206,17 @@ namespace shade {
 		fprintf(out.get(), "%s\n", text.c_str());
 	}
 
-	bool storage::is_selected(const std::string& id, const std::string& dev) const
-	{
-		auto it = known_bridges.find(id);
-		if (it == known_bridges.end())
-			return false;
-		return it->second.selected.count(dev) > 0;
-	}
-
-	void storage::switch_selection(const std::string& id, const std::string& dev)
-	{
-		auto it = known_bridges.find(id);
-		if (it == known_bridges.end())
-			return;
-
-		auto sel = it->second.selected.find(dev);
-		if (sel == it->second.selected.end())
-			it->second.selected.insert(dev);
-		else
-			it->second.selected.erase(dev);
-
-		store();
-	}
-
 	bool storage::bridge_located(const std::string& id, const std::string& base) {
 		store_at_exit needs_storing{ this };
 		auto it = known_bridges.find(id);
 		if (it == known_bridges.end()) {
-			known_bridges[id].base = base;
+			auto& bridge = known_bridges[id];
+			bridge.set_client(clientid, this);
+			bridge.hw.base = base;
 			needs_storing = true;
 		} else {
-			if (it->second.base != base) {
-				it->second.base = base;
+			if (it->second.hw.base != base) {
+				it->second.hw.base = base;
 				needs_storing = true;
 			}
 		}
@@ -161,20 +233,21 @@ namespace shade {
 		auto it = known_bridges.find(id);
 		if (it == known_bridges.end()) {
 			auto& bridge = known_bridges[id];
+			bridge.set_client(clientid, this);
 			bridge.seen = true;
-			bridge.name = name;
-			bridge.mac = mac;
-			bridge.modelid = modelid;
+			bridge.hw.name = name;
+			bridge.hw.mac = mac;
+			bridge.hw.modelid = modelid;
 			needs_storing = true;
 		} else {
 			auto& bridge = it->second;
 			bridge.seen = true;
-			if (bridge.name != name
-				|| bridge.mac != mac
-				|| bridge.modelid != modelid) {
-				bridge.name = name;
-				bridge.mac = mac;
-				bridge.modelid = modelid;
+			if (bridge.hw.name != name
+				|| bridge.hw.mac != mac
+				|| bridge.hw.modelid != modelid) {
+				bridge.hw.name = name;
+				bridge.hw.mac = mac;
+				bridge.hw.modelid = modelid;
 				needs_storing = true;
 			}
 		}
@@ -185,13 +258,12 @@ namespace shade {
 		store_at_exit needs_storing{ this };
 		auto it = known_bridges.find(id);
 		if (it == known_bridges.end()) {
-			known_bridges[id].username = username;
-			needs_storing = true;
+			auto& bridge = known_bridges[id];
+			bridge.set_client(clientid, this);
+			needs_storing = bridge.get_current()->update(username);
 		} else {
-			if (it->second.username != username) {
-				it->second.username = username;
-				needs_storing = true;
-			}
+			auto& bridge = it->second;
+			needs_storing = bridge.get_current()->update(username);
 		}
 	}
 
