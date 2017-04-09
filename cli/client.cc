@@ -8,6 +8,7 @@ class first_screen : public menu::current {
 
 	bool device_list_changed();
 	void rebuild_list();
+
 	template <typename C>
 	size_t count_devices(const C& list, const shade::model::host& host, const shade::model::hw_info& hw, size_t& distinct_bridges)
 	{
@@ -15,7 +16,7 @@ class first_screen : public menu::current {
 		auto const& selected = host.selected();
 
 		for (auto const& item : list) {
-			if (!selected.count(item.id))
+			if (!selected.count(item->id()))
 				continue;
 			++length;
 		}
@@ -45,7 +46,7 @@ inline auto device_state(const std::string& text)
 		std::string out;
 		out.reserve(2 + 4 + text.length());
 		out.push_back('[');
-		if (bri > max_bri) {
+		if (bri > shade::model::mode::max_value) {
 			out.push_back(' ');
 			out.push_back('-');
 			out.push_back('-');
@@ -63,28 +64,12 @@ inline auto device_state(const std::string& text)
 	};
 }
 
-inline auto device_brightness(shade::manager* manager, const std::string& bridgeid, const std::string& deviceid)
+inline auto device_brightness(const std::shared_ptr<shade::model::light_source>& source)
 {
 	return [=]() -> int {
-		auto& bridge = manager->bridge(bridgeid);
-
-		for (auto const& item : bridge.groups) {
-			if (deviceid != item.id)
-				continue;
-			if (!item.state.on)
-				return 0x100;
-			return item.state.bri;
-		}
-
-		for (auto const& item : bridge.lights) {
-			if (deviceid != item.id)
-				continue;
-			if (!item.state.on)
-				return 0x100;
-			return item.state.bri;
-		}
-
-		return 0x100;
+		if (!source->on())
+			return 0x100;
+		return source->bri();
 	};
 }
 
@@ -180,14 +165,14 @@ void first_screen::rebuild_list()
 		counter cnt;
 
 		for (auto const& group : bridge.groups) {
-			auto id = group.id;
+			auto id = group->id();
 			if (!selection.count(id))
 				continue;
 
 			cnt.set(devices, title_, bridge);
 			items.push_back(item::simple(
-				device_brightness(manager, bridgeid, id),
-				device_state(group.name),
+				device_brightness(group),
+				device_state(group->name()),
 				[=]() {}
 			));
 		}
@@ -200,14 +185,14 @@ void first_screen::rebuild_list()
 		counter cnt;
 
 		for (auto const& light : bridge.lights) {
-			auto id = light.id;
+			auto id = light->id();
 			if (!selection.count(id))
 				continue;
 
 			cnt.set(devices, title_, bridge);
 			items.push_back(item::simple(
-				device_brightness(manager, bridgeid, id),
-				device_state(light.name),
+				device_brightness(light),
+				device_state(light->name()),
 				[=]() {}
 			));
 		}
@@ -225,24 +210,24 @@ void first_screen::rebuild_list()
 	items_.swap(items);
 }
 
-void print(const shade::model::light_info& light, bool is_new)
+void print(const shade::model::light& light, bool is_new)
 {
-	printf("        [%s]: '%s' (%s) %s [%d]", light.id.c_str(),
-		light.name.c_str(), light.type.c_str(),
-		light.state.on ? "ON" : "OFF",
-		light.state.bri);
+	printf("        [%s]: '%s' (%s) %s [%d]", light.id().c_str(),
+		light.name().c_str(), light.type().c_str(),
+		light.on() ? "ON" : "OFF",
+		light.bri());
 
 	if (is_new) printf(" NEW LIGHT");
 	printf("\n");
 }
 
-void print(const shade::model::group_info& group, bool is_new)
+void print(const shade::model::group& group, bool is_new)
 {
-	printf("        [%s]: '%s' (%s) %s [%d]", group.id.c_str(),
-		group.name.c_str(),
-		group.type == "Room" ? group.klass.c_str() : group.type.c_str(),
-		group.state.any ? (group.state.on ? "ON" : "SOME") : "OFF",
-		group.state.bri);
+	printf("        [%s]: '%s' (%s) %s [%d]", group.id().c_str(),
+		group.name().c_str(),
+		group.type() == "Room" ? group.klass().c_str() : group.type().c_str(),
+		group.some() ? (group.on() ? "ON" : "SOME") : "OFF",
+		group.bri());
 
 	if (is_new) printf(" NEW GROUP");
 	printf("\n");
@@ -277,15 +262,15 @@ void client::on_previous(std::unordered_map<std::string, shade::model::bridge> c
 			if (!bridge.second.lights.empty()) {
 				printf("    lights:\n");
 				for (auto const& light : bridge.second.lights) {
-					print(light, false);
+					print(*light, false);
 				}
 			}
 			if (!bridge.second.groups.empty()) {
 				printf("    groups:\n");
 				for (auto const& group : bridge.second.groups) {
-					print(group, false);
-					for (auto& ref : group.lights) {
-						printf("            -> %s\n", ref.c_str());
+					print(*group, false);
+					for (auto& ref : group->lights()) {
+						printf("            -> %s\n", ref->id().c_str());
 					}
 				}
 			}
@@ -349,7 +334,7 @@ static auto find_if(const T& container, const std::string& id)
 	using std::begin;
 	using std::end;
 
-	return std::find_if(begin(container), end(container), [&](auto const& item) { return item.id == id; });
+	return std::find_if(begin(container), end(container), [&](auto const& item) { return item->id() == id; });
 }
 
 template <typename T>
@@ -361,40 +346,40 @@ void print_list(T& local, const T& update, const char* title)
 	bool removed = false;
 	bool header = false;
 	for (auto& loc : local) {
-		auto it = find_if(update, loc.id);
+		auto it = find_if(update, loc->id());
 		if (it == end(update)) {
 			if (!header) {
 				header = true;
 				printf("    %s:\n", title);
 			}
-			printf("        [%s] REMOVED\n", loc.id.c_str());
+			printf("        [%s] REMOVED\n", loc->id().c_str());
 			removed = true;
 			continue;
 		}
-		if (*it != loc) {
-			loc = *it;
+		if (**it != *loc) {
+			*loc = **it;
 			if (!header) {
 				header = true;
 				printf("    %s:\n", title);
 			}
-			print(loc, false);
+			print(*loc, false);
 		}
 	}
 
 	if (removed) {
-		auto it = std::remove_if(begin(local), end(local), [&](const auto& item) { return find_if(update, item.id) == end(update); });
+		auto it = std::remove_if(begin(local), end(local), [&](const auto& item) { return find_if(update, item->id()) == end(update); });
 		local.erase(it, end(local));
 		local.shrink_to_fit();
 	}
 
 	for (auto const& upd : update) {
-		auto it = find_if(local, upd.id);
+		auto it = find_if(local, upd->id());
 		if (it == end(local)) {
 			if (!header) {
 				header = true;
 				printf("    %s:\n", title);
 			}
-			print(upd, true);
+			print(*upd, true);
 			local.push_back(upd);
 			continue;
 		}
@@ -425,10 +410,10 @@ void client::select_items()
 	for (auto& bridge : manager_->bridges()) {
 		auto client = bridge.second.get_current();
 		for (auto const& group : bridge.second.groups) {
-			auto id = group.id;
+			auto id = group->id();
 			items.push_back(item::simple(
 				is_selected(client, id),
-				tick_out(group.name),
+				tick_out(group->name()),
 				[=]() { client->switch_selection(id); }
 			));
 		}
@@ -437,10 +422,10 @@ void client::select_items()
 	for (auto const& bridge : manager_->bridges()) {
 		auto client = bridge.second.get_current();
 		for (auto const& light : bridge.second.lights) {
-			auto id = light.id;
+			auto id = light->id();
 			items.push_back(item::simple(
 				is_selected(client, id),
-				tick_out(light.name),
+				tick_out(light->name()),
 				[=]() { client->switch_selection(id); }
 			));
 		}

@@ -1,6 +1,7 @@
 #include "client.h"
 #include <shade/asio/network.h>
 #include <shade/asio/http.h>
+#include <shade/version.h>
 #include <iostream>
 
 int main() try {
@@ -15,6 +16,7 @@ int main() try {
 		return 2;
 	}
 
+	printf("shade-cli version %s\n\n", SHADE_VERSION_FULL);
 	events.manager_ = &hue;
 	hue.search();
 
