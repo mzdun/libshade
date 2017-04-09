@@ -27,37 +27,64 @@
 
 #include <stdint.h>
 #include <unordered_set>
+#include <string>
 
 namespace json
 {
+	using ctx_env = std::unordered_map<std::string, void*>;
+
 	template <typename T>
 	struct translator;
 
 	template <typename T>
-	inline value pack(const T& ctx) {
+	inline value pack(const T& ctx, ctx_env& env) {
 		translator<T> p;
-		return p.pack(&ctx);
+		return p.pack(&ctx, env);
 	}
 
 	template <typename T>
-	inline T unpack(const value& v) {
+	inline T unpack(const value& v, ctx_env& env) {
 		translator<T> p;
 		T ctx;
-		if (!p.unpack(v, &ctx))
+		if (!p.unpack(v, &ctx, env))
 			return T{};
 		return ctx;
 	}
 
 	template <typename T>
-	inline bool unpack(T& ctx, const value& v) {
+	inline bool unpack(T& ctx, const value& v, ctx_env& env) {
 		translator<T> p;
-		return p.unpack(v, &ctx);
+		return p.unpack(v, &ctx, env);
+	}
+
+	template <typename T>
+	inline value pack(const T& ctx) {
+		ctx_env env;
+		return pack(ctx, env);
+	}
+
+	template <typename T>
+	inline T unpack(const value& v) {
+		ctx_env env;
+		return unpack<T>(v, env);
+	}
+
+	template <typename T>
+	inline bool unpack(T& ctx, const value& v) {
+		ctx_env env;
+		return unpack(ctx, v, env);
 	}
 
 	struct base_translator {
 		virtual ~base_translator() {}
-		virtual value pack(const void* ctx) const = 0;
-		virtual bool unpack(const value& v, void* ctx) const = 0;
+		virtual value pack(const void* ctx, ctx_env&) = 0;
+		virtual bool unpack(const value& v, void* ctx, ctx_env&) = 0;
+	};
+
+	struct inplace_translator {
+		virtual ~inplace_translator() = default;
+		virtual void pack(map& out, const void* ctx, ctx_env&) = 0;
+		virtual bool unpack(const map& out, void* ctx, ctx_env&) = 0;
 	};
 
 	struct named_translator : base_translator {
@@ -65,15 +92,16 @@ namespace json
 		virtual bool valid(const void*) const { return true; }
 		virtual bool optional() const { return false; }
 		virtual void clean(void* ctx) const = 0;
+		virtual inplace_translator* inplace() { return nullptr; }
 	};
 
 	template <typename T>
-	struct simple_translator : base_translator{
-		value pack(const void* ctx) const override {
+	struct simple_translator : base_translator {
+		value pack(const void* ctx, ctx_env&) override {
 			return *static_cast<const T*>(ctx);
 		}
-		bool unpack(const value& v, void* ctx) const override {
-			static const type expected = type_to_value<T>::value;
+		bool unpack(const value& v, void* ctx, ctx_env&) override {
+			constexpr type expected = type_to_value<T>::value;
 			T& ref = *static_cast<T*>(ctx);
 			ref = T(v.as<expected>());
 			return true;
@@ -83,15 +111,15 @@ namespace json
 	template <typename C>
 	struct container_translator : base_translator
 	{
-		value pack(const void* ctx) const override {
+		value pack(const void* ctx, ctx_env& env) override {
 			vector out;
 			const C& container = *static_cast<const C*>(ctx);
 			for (auto&& item : container)
-				out.add(json::pack(item));
+				out.add(json::pack(item, env));
 			return out;
 		}
 
-		bool unpack(const value& v, void* ctx) const override {
+		bool unpack(const value& v, void* ctx, ctx_env& env) override {
 			auto in = get<VECTOR>(v);
 			C& out = *static_cast<C*>(ctx);
 			out.clear();
@@ -101,7 +129,7 @@ namespace json
 			translator<value_t> sub;
 			for (auto&& item : in) {
 				value_t new_ctx;
-				if (!sub.unpack(item, &new_ctx))
+				if (!sub.unpack(item, &new_ctx, env))
 					return false;
 
 				out.push_back(new_ctx);
@@ -114,15 +142,15 @@ namespace json
 	template <typename T>
 	struct translator<std::unordered_set<T>> : base_translator
 	{
-		value pack(const void* ctx) const override {
+		value pack(const void* ctx, ctx_env& env) override {
 			vector out;
 			const std::unordered_set<T>& container = *static_cast<const std::unordered_set<T>*>(ctx);
 			for (auto&& item : container)
-				out.add(json::pack(item));
+				out.add(json::pack(item, env));
 			return out;
 		}
 
-		bool unpack(const value& v, void* ctx) const override {
+		bool unpack(const value& v, void* ctx, ctx_env& env) override {
 			auto in = get<VECTOR>(v);
 			std::unordered_set<T>& out = *static_cast<std::unordered_set<T>*>(ctx);
 			out.clear();
@@ -130,7 +158,7 @@ namespace json
 			translator<T> sub;
 			for (auto&& item : in) {
 				T new_ctx;
-				if (!sub.unpack(item, &new_ctx))
+				if (!sub.unpack(item, &new_ctx, env))
 					return false;
 
 				out.insert(new_ctx);
@@ -143,16 +171,16 @@ namespace json
 	template <typename T>
 	struct translator<std::unordered_map<std::string, T>> : base_translator
 	{
-		value pack(const void* ctx) const override {
+		value pack(const void* ctx, ctx_env& env) override {
 			map out;
 			using C = std::unordered_map<std::string, T>;
 			const C& container = *static_cast<const C*>(ctx);
 			for (auto&& item : container)
-				out.add(item.first, json::pack(item.second));
+				out.add(item.first, json::pack(item.second, env));
 			return out;
 		}
 
-		bool unpack(const value& v, void* ctx) const override {
+		bool unpack(const value& v, void* ctx, ctx_env& env) override {
 			auto in = get<MAP>(v);
 			using C = std::unordered_map<std::string, T>;
 			C& out = *static_cast<C*>(ctx);
@@ -162,7 +190,7 @@ namespace json
 			translator<value_t> sub;
 			for (auto&& item : in) {
 				value_t& new_ctx = out[item.first];
-				if (!sub.unpack(item.second, &new_ctx))
+				if (!sub.unpack(item.second, &new_ctx, env))
 					return false;
 			}
 
@@ -194,15 +222,15 @@ namespace json
 	struct translator<std::array<T, length>> : base_translator {
 		using C = std::array<T, length>;
 
-		value pack(const void* ctx) const override {
+		value pack(const void* ctx, ctx_env& env) override {
 			vector out;
 			const C& container = *static_cast<const C*>(ctx);
 			for (auto&& item : container)
-				out.add(json::pack(item));
+				out.add(json::pack(item, env));
 			return out;
 		}
 
-		bool unpack(const value& v, void* ctx) const override {
+		bool unpack(const value& v, void* ctx, ctx_env& env) override {
 			auto in = get<VECTOR>(v);
 			C& out = *static_cast<C*>(ctx);
 
@@ -214,7 +242,7 @@ namespace json
 				if (index == length)
 					return false;
 
-				if (!sub.unpack(item, &out[index]))
+				if (!sub.unpack(item, &out[index], env))
 					return false;
 
 				++index;
@@ -237,15 +265,15 @@ namespace json
 
 		member_translator(const std::string& name, P T::* prop) : m_name(name), m_prop(prop) {}
 		const std::string& name() const override { return m_name; }
-		value pack(const void* ctx) const override {
+		value pack(const void* ctx, ctx_env& env) override {
 			auto ptr = static_cast<const T*>(ctx);
-			return json::pack(ptr->*m_prop);
+			return json::pack(ptr->*m_prop, env);
 		}
 
-		bool unpack(const value& v, void* ctx) const override {
+		bool unpack(const value& v, void* ctx, ctx_env& env) override {
 			auto ptr = static_cast<T*>(ctx);
 			translator<P> p;
-			return p.unpack(v, &(ptr->*m_prop));
+			return p.unpack(v, &(ptr->*m_prop), env);
 		}
 
 		void clean(void* ctx) const override {
@@ -320,29 +348,29 @@ namespace json
 
 		member_item_translator(const std::string& name, P T::* prop) : m_name(name), m_prop(prop) {}
 		const std::string& name() const override { return m_name; }
-		value pack(const void* ctx) const override {
+		value pack(const void* ctx, ctx_env& env) override {
 			auto ptr = static_cast<const T*>(ctx);
 			const auto& prop = ptr->*m_prop;
 			if (prop.size() == 1) {
-				return json::pack(json::impl::front(prop));
+				return json::pack(json::impl::front(prop), env);
 			}
-			return json::pack(prop);
+			return json::pack(prop, env);
 		}
 
-		bool unpack(const value& v, void* ctx) const override {
+		bool unpack(const value& v, void* ctx, ctx_env& env) override {
 			auto ptr = static_cast<const T*>(ctx);
 			P& prop = const_cast<P&>(ptr->*m_prop);
 			prop.clear();
 
 			if (v.is<impl::item_expected<P>::value>()) {
 				translator<P> p;
-				return p.unpack(v, &prop);
+				return p.unpack(v, &prop, env);
 			}
 
 			using item_t = typename impl::item_expected<P>::value_type;
 			translator<item_t> p;
 			item_t& new_ctx = impl::front(prop);
-			return p.unpack(v, &new_ctx);
+			return p.unpack(v, &new_ctx, env);
 		}
 
 		bool valid(const void* ctx) const override {
@@ -362,39 +390,56 @@ namespace json
 		using props_t = std::vector<std::unique_ptr<named_translator>>;
 		props_t m_props;
 
+		ctx_env env_;
+
 		template <typename P, typename T>
 		void add_prop(const std::string& name, P T::* prop) {
-			m_props.emplace_back(std::move(std::make_unique<member_translator<T, P>>(name, prop)));
+			m_props.emplace_back(std::make_unique<member_translator<T, P>>(name, prop));
 		}
 
 		template <typename P, typename T>
 		void add_opt_prop(const std::string& name, P T::* prop) {
-			m_props.emplace_back(std::move(std::make_unique<member_opt_translator<T, P>>(name, prop)));
+			m_props.emplace_back(std::make_unique<member_opt_translator<T, P>>(name, prop));
 		}
 
 		template <typename P, typename T>
 		void add_item_prop(const std::string& name, P T::* prop) {
-			m_props.emplace_back(std::move(std::make_unique<member_item_translator<T, P>>(name, prop)));
+			m_props.emplace_back(std::make_unique<member_item_translator<T, P>>(name, prop));
 		}
 
-		value pack(const void* ctx) const override {
+		void add(std::unique_ptr<named_translator> tr) { m_props.emplace_back(std::move(tr)); }
+
+		value pack(const void* ctx, ctx_env& env) override {
+			env_ = env;
 			map obj;
 			for (auto&& prop : m_props) {
+				auto inplace = prop->inplace();
+				if (inplace) {
+					inplace->pack(obj, ctx, env_);
+					continue;
+				}
 				if (!prop->valid(ctx))
 					continue;
 
-				obj.add(prop->name(), prop->pack(ctx));
+				obj.add(prop->name(), prop->pack(ctx, env_));
 			}
 			return obj;
 		}
 
-		bool unpack(const value& v, void* ctx) const override {
+		bool unpack(const value& v, void* ctx, ctx_env& env) override {
+			env_ = env;
 			if (!v.is<MAP>())
 				return false;
 
 			auto obj = get<MAP>(v);
 
 			for (auto&& prop : m_props) {
+				auto inplace = prop->inplace();
+				if (inplace) {
+					if (!inplace->unpack(obj, ctx, env_))
+						return false;
+					continue;
+				}
 				auto it = obj.find(prop->name());
 
 				if (it == obj.end()) {
@@ -404,7 +449,7 @@ namespace json
 					continue;
 				}
 
-				if (!prop->unpack(it->second, ctx))
+				if (!prop->unpack(it->second, ctx, env_))
 					return false;
 			}
 
