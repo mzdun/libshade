@@ -110,75 +110,78 @@ namespace json {
 
 namespace shade {
 
-	template <typename Handler>
-	class http_client : public http::client {
-		Handler handler_;
-		std::unique_ptr<http::handler> load_handler_;
-		int status_ = 0;
-		std::vector<char> data_;
-	public:
+	namespace io {
+		template <typename Handler>
+		class http_client : public http::listener {
+			Handler handler_;
+			std::unique_ptr<http::handler> load_handler_;
+			int status_ = 0;
+			std::vector<char> data_;
+		public:
 
-		http_client(Handler handler)
-			: handler_{ std::move(handler) }
-		{
-		}
+			http_client(Handler handler)
+				: handler_{ std::move(handler) }
+			{
+			}
 
-		void set_handler(std::unique_ptr<http::handler> handler) override
-		{
-			load_handler_ = std::move(handler);
-		}
+			void set_handler(std::unique_ptr<http::handler> handler) override
+			{
+				load_handler_ = std::move(handler);
+			}
 
-		void on_headers(int status, const tangle::cstring& reason, const http::headers& headers) override
-		{
-			status_ = status;
+			void on_headers(int status, const tangle::cstring& reason, const http::headers& headers) override
+			{
+				status_ = status;
 
 #if 0
-			std::cout << status << " " << reason << "\n";
-			for (const auto& pair : headers) {
-				for (const auto& value : pair.second) {
-					std::cout << pair.first << ": " << value << "\n";
+				std::cout << status << " " << reason << "\n";
+				for (const auto& pair : headers) {
+					for (const auto& value : pair.second) {
+						std::cout << pair.first << ": " << value << "\n";
+					}
 				}
-			}
 #endif
-		}
-
-		void on_data(const char* data, size_t length) override
-		{
-			if (length == 0) {
-				auto value = json::from_string(data_.data(), data_.size());
-				if (value.is<json::NULLPTR>()) {
-					printf("%s\n", std::string{data_.data(), data_.size()}.c_str());
-				}
-				data_.clear();
-				handler_(status_, value);
-				load_handler_.reset(); // this will start a destroy cascade
-				return;                // so do not touch anything and run...
 			}
-			data_.insert(data_.end(), data, data + length);
-		}
-	};
 
-	template <typename Handler>
-	class http_json_client : public http_client<Handler> {
-	public:
-		http_json_client(Handler handler)
-			: http_client<Handler>{ std::move(handler) }
+			void on_data(const char* data, size_t length) override
+			{
+				if (length == 0) {
+					auto value = json::from_string(data_.data(), data_.size());
+					if (value.is<json::NULLPTR>()) {
+						printf("%s\n", std::string{ data_.data(), data_.size() }.c_str());
+					}
+					data_.clear();
+					handler_(status_, value);
+					load_handler_.reset(); // this will start a destroy cascade
+					return;                // so do not touch anything and run...
+				}
+				data_.insert(data_.end(), data, data + length);
+			}
+		};
+
+		template <typename Handler>
+		class http_json_client : public http_client<Handler> {
+		public:
+			http_json_client(Handler handler)
+				: http_client<Handler>{ std::move(handler) }
+			{
+			}
+
+			tangle::cstring content_type() override { return "text/json"; }
+		};
+
+		template <typename Handler>
+		auto make_client(Handler handler)
 		{
+			return std::make_unique<http_client<Handler>>(std::move(handler));
 		}
 
-		tangle::cstring content_type() override { return "text/json"; }
-	};
+		template <typename Handler>
+		auto make_json_client(Handler handler)
+		{
+			return std::make_unique<http_json_client<Handler>>(std::move(handler));
+		}
 
-	template <typename Handler>
-	auto make_client(Handler handler)
-	{
-		return std::make_unique<http_client<Handler>>(std::move(handler));
-	}
-
-	template <typename Handler>
-	auto make_json_client(Handler handler)
-	{
-		return std::make_unique<http_json_client<Handler>>(std::move(handler));
 	}
 
 	template <typename T>

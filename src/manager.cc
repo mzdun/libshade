@@ -1,5 +1,5 @@
 #include "shade/manager.h"
-#include "shade/connection.h"
+#include "shade/io/connection.h"
 #include "json.hpp"
 #include "manager_internal.h"
 #include <algorithm>
@@ -7,8 +7,8 @@
 using namespace std::literals;
 
 namespace shade {
-	manager::manager(const std::string& name, client* client, network* net, http* browser)
-		: client_{ client }
+	manager::manager(const std::string& name, listener* listener, io::network* net, io::http* browser)
+		: listener_{ listener }
 		, net_{ net }
 		, browser_{ browser }
 		, storage_{ name }
@@ -18,7 +18,7 @@ namespace shade {
 
 	void manager::search()
 	{
-		client_->on_previous(storage_.bridges());
+		listener_->on_previous(storage_.bridges());
 
 		discovery_.search([this](std::string const& id, std::string const& base) {
 			const auto known = !storage_.bridge_located(id, base);
@@ -37,16 +37,16 @@ namespace shade {
 		});
 	}
 
-	const bridge_info& manager::bridge(const std::string& bridgeid) const
+	const model::bridge& manager::bridge(const std::string& bridgeid) const
 	{
 		auto it = storage_.find(bridgeid);
 		if (it != storage_.end())
 			return it->second;
-		static const bridge_info dummy;
+		static const model::bridge dummy;
 		return dummy;
 	}
 
-	bool manager::reconnect(json::value doc, const connection& conn)
+	bool manager::reconnect(json::value doc, const io::connection& conn)
 	{
 		api::errors error;
 		if (get_error(error, doc)) {
@@ -58,14 +58,13 @@ namespace shade {
 		return false;
 	}
 
-	void manager::get_config(const connection& conn)
+	void manager::get_config(const io::connection& conn)
 	{
-		conn.get("/config", make_client([=](int status, json::value doc) {
+		conn.get("/config", io::make_client([=](int status, json::value doc) {
 			api::config cfg;
 			if (unpack_json(cfg, doc)) {
-				client_->on_bridge(conn.id(), storage_.find(conn.id()) != storage_.end());
 				storage_.bridge_named(conn.id(), cfg.name, cfg.mac, cfg.modelid);
-				client_->on_bridge_named(conn.id());
+				listener_->on_bridge(conn.id());
 				auto it = storage_.find(conn.id());
 				if (it == storage_.end())
 					return;
@@ -79,9 +78,9 @@ namespace shade {
 		}));
 	}
 
-	void manager::create_user(const connection& conn)
+	void manager::create_user(const io::connection& conn)
 	{
-		client_->on_connecting(conn.id());
+		listener_->on_connecting(conn.id());
 		create_user(conn, {});
 	}
 
@@ -96,21 +95,21 @@ namespace shade {
 	}
 
 	std::string machine();
-	std::string userdefinition(const std::string& client) {
+	std::string userdefinition(const std::string& listener) {
 		auto name = machine();
 		if (name.empty())
 			name = "unknown";
 
-		return json::map{}.add("devicetype", client + "#" + name).to_string();
+		return json::map{}.add("devicetype", listener + "#" + name).to_string();
 	}
 
-	void manager::get_user(const connection& conn, int status, json::value doc, std::chrono::nanoseconds sofar, std::chrono::steady_clock::time_point then) {
+	void manager::get_user(const io::connection& conn, int status, json::value doc, std::chrono::nanoseconds sofar, std::chrono::steady_clock::time_point then) {
 		if (status / 100 < 4) {
 			auto value = get_username(doc);
 			if (value.is<json::STRING>()) {
 				auto username = value.as<json::STRING>();
 				storage_.bridge_connected(conn.id(), username);
-				client_->on_connected(conn.id());
+				listener_->on_connected(conn.id());
 				get_lights(conn.logged(username));
 				return;
 			}
@@ -130,26 +129,26 @@ namespace shade {
 					return;
 			}
 		}
-		client_->on_connect_timeout(conn.id());
+		listener_->on_connect_timeout(conn.id());
 	}
 
-	void manager::create_user(const connection& conn, std::chrono::nanoseconds sofar)
+	void manager::create_user(const io::connection& conn, std::chrono::nanoseconds sofar)
 	{
 		if (sofar >= 30s) {
-			client_->on_connect_timeout(conn.id());
+			listener_->on_connect_timeout(conn.id());
 			return;
 		}
 
 		auto then = std::chrono::steady_clock::now();
 		auto json = userdefinition(storage_.current_client());
-		conn.post("", json, make_json_client([=](int status, json::value doc) {
+		conn.post("", json, io::make_json_client([=](int status, json::value doc) {
 			get_user(conn, status, doc, sofar, then);
 		}));
 	}
 
-	void manager::get_lights(const connection& conn)
+	void manager::get_lights(const io::connection& conn)
 	{
-		conn.get("/lights", make_client([=](int status, json::value doc) {
+		conn.get("/lights", io::make_client([=](int status, json::value doc) {
 			std::unordered_map<std::string, api::light> lights;
 			if (unpack_json(lights, doc)) {
 				get_groups(conn, std::move(lights));
@@ -163,13 +162,13 @@ namespace shade {
 		}));
 	}
 
-	void manager::get_groups(const connection& conn, std::unordered_map<std::string, api::light> lights)
+	void manager::get_groups(const io::connection& conn, std::unordered_map<std::string, api::light> lights)
 	{
-		conn.get("/groups", make_client([=, lights = std::move(lights)](int status, json::value doc) {
+		conn.get("/groups", io::make_client([=, lights = std::move(lights)](int status, json::value doc) {
 			std::unordered_map<std::string, api::group> groups;
 			if (unpack_json(groups, doc)) {
 				add_config(conn.id(), std::move(lights), std::move(groups));
-				client_->on_refresh(conn.id());
+				listener_->on_refresh(conn.id());
 				return;
 			}
 
@@ -200,10 +199,10 @@ namespace shade {
 			}
 		}
 
-		std::vector<light_info> stg_lights;
+		std::vector<model::light_info> stg_lights;
 		stg_lights.reserve(lights.size());
 		std::transform(begin(lights), end(lights), std::back_inserter(stg_lights), [](auto & in) {
-			light_info out;
+			model::light_info out;
 			out.id = std::move(in.second.uniqueid);
 			out.name = std::move(in.second.name);
 			out.type = std::move(in.second.modelid);
@@ -218,10 +217,10 @@ namespace shade {
 			return out;
 		});
 
-		std::vector<group_info> stg_groups;
+		std::vector<model::group_info> stg_groups;
 		stg_groups.reserve(groups.size());
 		std::transform(begin(groups), end(groups), std::back_inserter(stg_groups), [](auto & in) {
-			group_info out;
+			model::group_info out;
 			out.id = "group/" + in.first;
 			out.name = std::move(in.second.name);
 			out.type = std::move(in.second.type);

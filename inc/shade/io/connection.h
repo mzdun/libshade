@@ -1,8 +1,8 @@
 #pragma once
 
-#include "shade/http.h"
+#include "shade/io/http.h"
 
-namespace shade {
+namespace shade { namespace io {
 	class connection {
 		http* browser_;
 		tangle::uri base_;
@@ -26,9 +26,9 @@ namespace shade {
 		connection logged(const std::string& username) const;
 		connection unlogged() const;
 
-		bool get(const std::string& resource, http::client_ptr client) const;
-		bool del(const std::string& resource, http::client_ptr client) const;
-		bool put(const std::string& resource, const std::string& data, http::client_ptr client) const;
-		bool post(const std::string& resource, const std::string& data, http::client_ptr client) const;
+		bool get(const std::string& resource, http::listener_ptr client) const;
+		bool del(const std::string& resource, http::listener_ptr client) const;
+		bool put(const std::string& resource, const std::string& data, http::listener_ptr client) const;
+		bool post(const std::string& resource, const std::string& data, http::listener_ptr client) const;
 	};
-}
+} }

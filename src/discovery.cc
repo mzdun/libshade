@@ -7,7 +7,7 @@
 #define STR(x) STR2(x)
 
 namespace shade {
-	discovery::discovery(network* net)
+	discovery::discovery(io::network* net)
 		: net_{ net }
 		, udp_socket_(net->udp_socket())
 	{

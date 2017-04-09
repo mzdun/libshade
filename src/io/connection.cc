@@ -1,6 +1,6 @@
-#include "shade/connection.h"
+#include "shade/io/connection.h"
 
-namespace shade {
+namespace shade { namespace io {
 	connection connection::logged(const std::string& username) const
 	{
 		return { browser_, base_, id_, root_ + "/" + username };
@@ -11,23 +11,23 @@ namespace shade {
 		return { browser_, base_, id_ };
 	}
 
-	bool connection::get(const std::string& resource, http::client_ptr client) const
+	bool connection::get(const std::string& resource, http::listener_ptr client) const
 	{
 		return browser_->get(uri_with(resource), std::move(client));
 	}
 
-	bool connection::del(const std::string& resource, http::client_ptr client) const
+	bool connection::del(const std::string& resource, http::listener_ptr client) const
 	{
 		return browser_->del(uri_with(resource), std::move(client));
 	}
 
-	bool connection::put(const std::string& resource, const std::string& data, http::client_ptr client) const
+	bool connection::put(const std::string& resource, const std::string& data, http::listener_ptr client) const
 	{
 		return browser_->put(uri_with(resource), data, std::move(client));
 	}
 
-	bool connection::post(const std::string& resource, const std::string& data, http::client_ptr client) const
+	bool connection::post(const std::string& resource, const std::string& data, http::listener_ptr client) const
 	{
 		return browser_->post(uri_with(resource), data, std::move(client));
 	}
-}
+} }

@@ -24,15 +24,14 @@ set(PROJECT_VERSION_FULL ${PROJECT_VERSION}${PROJECT_VERSION_STABILITY}+${PROJEC
 
 set(SRCS
 	src/manager.cc
-	src/connection.cc
 	src/discovery.cc
 	src/storage.cc
+)
+
+set(INCS
 	inc/shade/manager.h
-	inc/shade/connection.h
 	inc/shade/discovery.h
-	inc/shade/network.h
 	inc/shade/storage.h
-	inc/shade/http.h
 )
 
 if (UNIX)
@@ -46,6 +45,38 @@ list(APPEND SRCS
 	src/storage_win.cc
 )
 endif()
+source_group("src" FILES ${SRCS})
+source_group("inc" FILES ${INCS})
+
+set(SRCS_IO
+	src/io/connection.cc
+)
+
+set(INCS_IO
+	inc/shade/io/connection.h
+	inc/shade/io/network.h
+	inc/shade/io/http.h
+)
+
+source_group("src\\io" FILES ${SRCS_IO})
+source_group("inc\\io" FILES ${INCS_IO})
+
+set(SRCS_MODEL
+	src/model/bridge.cc
+	src/model/updatable.cc
+	src/model/host.cc
+	src/model/json.h
+)
+
+set(INCS_MODEL
+	inc/shade/model/base.h
+	inc/shade/model/updatable.h
+	inc/shade/model/bridge.h
+	inc/shade/model/host.h
+)
+
+source_group("src\\model" FILES ${SRCS_MODEL})
+source_group("inc\\model" FILES ${INCS_MODEL})
 
 set(ASIO_SRCS
 	src/asio/network.cc
@@ -90,7 +121,13 @@ set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
 endif()
 
-add_library(shade STATIC ${SRCS})
+add_library(shade STATIC
+	${SRCS}
+	${INCS}
+	${SRCS_IO}
+	${INCS_IO}
+	${SRCS_MODEL}
+	${INCS_MODEL})
 add_library(shade-asio STATIC ${ASIO_SRCS})
 add_library(shade-tangle STATIC ${TANGLE_SRCS})
 add_library(shade-json STATIC ${JSON_SRCS})

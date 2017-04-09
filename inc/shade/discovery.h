@@ -5,14 +5,14 @@
 #include <string>
 #include <unordered_map>
 
-#include "shade/network.h"
+#include "shade/io/network.h"
 
 namespace shade {
 	class discovery {
 		bool connected_ = false;
-		network* net_;
-		std::unique_ptr<udp> udp_socket_;
-		std::unique_ptr<read_handler> current_search_;
+		io::network* net_;
+		std::unique_ptr<io::udp> udp_socket_;
+		std::unique_ptr<io::read_handler> current_search_;
 
 		struct bridge_info {
 			std::string location;
@@ -23,7 +23,7 @@ namespace shade {
 	public:
 		using onbridge = std::function<void(const std::string& id, const std::string& base)>;
 		using ondone = std::function<void()>;
-		discovery(network* net);
+		discovery(io::network* net);
 		discovery(const discovery&) = delete;
 		discovery(discovery&&);
 		discovery& operator=(const discovery&) = delete;

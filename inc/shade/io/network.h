@@ -4,7 +4,7 @@
 #include <functional>
 #include <memory>
 
-namespace shade {
+namespace shade { namespace io {
 	struct read_handler {
 		virtual ~read_handler() = default;
 	};
@@ -28,6 +28,6 @@ namespace shade {
 		virtual ~network() = default;
 		virtual std::unique_ptr<udp> udp_socket() = 0;
 		virtual std::unique_ptr<tcp> tcp_socket() = 0;
-		virtual std::unique_ptr<shade::timeout> timeout(milliseconds duration, std::function<void()> && cb) = 0;
+		virtual std::unique_ptr<io::timeout> timeout(milliseconds duration, std::function<void()> && cb) = 0;
 	};
-}
+} }
