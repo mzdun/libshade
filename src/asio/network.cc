@@ -2,15 +2,15 @@
 #include <array>
 #include <iostream>
 
-namespace shade { namespace asio {
-	class udp : public shade::udp {
+namespace shade { namespace io { namespace asio {
+	class udp : public io::udp {
 		io_service& service_;
 		ip::udp::socket socket_;
 	public:
 		udp(io_service&, error_code&);
 		bool bind(uint16_t) override;
 		bool write_datagram(const uint8_t* data, size_t length, uint32_t ip, uint16_t port) override;
-		std::unique_ptr<shade::read_handler> read_datagram(std::chrono::milliseconds duration, std::function<void(const uint8_t*, size_t, bool)> && cb) override;
+		std::unique_ptr<io::read_handler> read_datagram(std::chrono::milliseconds duration, std::function<void(const uint8_t*, size_t, bool)> && cb) override;
 	};
 
 	udp::udp(io_service& service, error_code& ec)
@@ -92,7 +92,7 @@ namespace shade { namespace asio {
 		}
 	};
 
-	class read_handler : public shade::read_handler {
+	class read_handler : public io::read_handler {
 		std::weak_ptr<datagram_handler> io_;
 	public:
 		read_handler(const std::shared_ptr<datagram_handler>& io)
@@ -105,7 +105,7 @@ namespace shade { namespace asio {
 		}
 	};
 
-	std::unique_ptr<shade::read_handler> udp::read_datagram(std::chrono::milliseconds duration, std::function<void(const uint8_t*, size_t, bool)> && cb)
+	std::unique_ptr<io::read_handler> udp::read_datagram(std::chrono::milliseconds duration, std::function<void(const uint8_t*, size_t, bool)> && cb)
 	{
 		auto io = std::make_shared<datagram_handler>(&socket_, std::move(cb));
 		error_code ec;
@@ -114,7 +114,7 @@ namespace shade { namespace asio {
 		return std::make_unique<read_handler>(io);
 	}
 
-	class tcp : public shade::tcp {
+	class tcp : public io::tcp {
 		io_service& service_;
 	public:
 		tcp(io_service&);
@@ -125,7 +125,7 @@ namespace shade { namespace asio {
 	{
 	}
 
-	std::unique_ptr<shade::udp> network::udp_socket()
+	std::unique_ptr<io::udp> network::udp_socket()
 	{
 		error_code ec;
 		auto ptr = std::make_unique<udp>(service_, ec);
@@ -134,7 +134,7 @@ namespace shade { namespace asio {
 		return ptr;
 	}
 
-	std::unique_ptr<shade::tcp> network::tcp_socket()
+	std::unique_ptr<io::tcp> network::tcp_socket()
 	{
 		return std::make_unique<tcp>(service_);
 	}
@@ -171,7 +171,7 @@ namespace shade { namespace asio {
 		}
 	};
 
-	class timeout_handler : public shade::timeout {
+	class timeout_handler : public io::timeout {
 		std::shared_ptr<timer> timer_;
 	public:
 		timeout_handler(const std::shared_ptr<timer>& timer)
@@ -183,7 +183,7 @@ namespace shade { namespace asio {
 		}
 	};
 
-	std::unique_ptr<shade::timeout> network::timeout(milliseconds duration, std::function<void()> && cb)
+	std::unique_ptr<io::timeout> network::timeout(milliseconds duration, std::function<void()> && cb)
 	{
 		auto timer = std::make_shared<asio::timer>(service_, std::move(cb));
 		auto result = std::make_unique<timeout_handler>(timer);
@@ -191,4 +191,4 @@ namespace shade { namespace asio {
 			return {};
 		return result;
 	}
-} }
+} } }

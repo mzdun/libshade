@@ -1,13 +1,13 @@
 #include <shade/asio/http.h>
 
-namespace shade { namespace asio {
+namespace shade { namespace io { namespace asio {
 	class http_handler : public http::handler {
 		io_service& service_;
 		ip::tcp::resolver resolver_;
 		ip::tcp::socket socket_;
 		streambuf request_;
 		streambuf response_;
-		http::client_ptr client_;
+		http::listener_ptr client_;
 
 		void error(const error_code& ec) {
 			client_->on_headers(ec.value(), {}, {});
@@ -24,38 +24,38 @@ namespace shade { namespace asio {
 		void read_body();
 	public:
 
-		http_handler(io_service& service, http::client_ptr client)
+		http_handler(io_service& service, http::listener_ptr listener)
 			: service_{ service }
 			, resolver_{ service }
 			, socket_{ service }
-			, client_{ std::move(client) }
+			, client_{ std::move(listener) }
 		{}
 
 		std::streambuf* buffer() { return &request_; }
-		http::client* client() { return client_.get(); }
+		http::listener* listener() { return client_.get(); }
 
 		void send(const std::string& host, const std::string& service);
 	};
 
-	static inline bool error(http::client* client, int status = 1000) {
-		client->on_headers(status, {}, {});
-		client->on_data(nullptr, 0);
+	static inline bool error(http::listener* listener, int status = 1000) {
+		listener->on_headers(status, {}, {});
+		listener->on_data(nullptr, 0);
 		return false;
 	}
 
-	bool http::send(method method, const tangle::uri& address, const std::string& data, client_ptr client)
+	bool http::send(method method, const tangle::uri& address, const std::string& data, listener_ptr listener)
 	{
-		auto handler = std::make_unique<http_handler>(service_, std::move(client));
-		auto content_type = handler->client()->content_type();
+		auto handler = std::make_unique<http_handler>(service_, std::move(listener));
+		auto content_type = handler->listener()->content_type();
 		switch (method) {
 		case method::PUT:
 		case method::POST:
 			if (content_type.empty() || data.empty())
-				return error(handler->client());
+				return error(handler->listener());
 			break;
 		default:
 			if (!data.empty())
-				return error(handler->client());
+				return error(handler->listener());
 		}
 
 		auto auth = tangle::uri::auth_builder::parse(address.authority());
@@ -82,7 +82,7 @@ namespace shade { namespace asio {
 
 		auto service = auth.port.empty() ? address.scheme().str() : auth.port;
 		auto ptr = handler.get();
-		ptr->client()->set_handler(std::move(handler));
+		ptr->listener()->set_handler(std::move(handler));
 		ptr->send(auth.host, service);
 		return true;
 	}
@@ -169,4 +169,4 @@ namespace shade { namespace asio {
 		});
 	}
 
-} }
+} } }
