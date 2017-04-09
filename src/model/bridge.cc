@@ -25,15 +25,8 @@ namespace json {
 		JSON_PROP(type);
 	};
 
-	JSON_STRUCT_(shade::model::light_info, shade::model::info_base) {
-		JSON_PROP(state);
-	};
-
-	JSON_STRUCT_(shade::model::group_info, shade::model::info_base) {
-		JSON_OPT_NAMED_PROP("class", klass);
-		JSON_PROP(state);
-		JSON_PROP(lights);
-	};
+	JSON_STATIC_DECL(shade::model::light);
+	JSON_STATIC_DECL(shade::model::group);
 
 	JSON_STRUCT(shade::model::hw_info) {
 		JSON_PROP(base);
@@ -46,11 +39,34 @@ namespace json {
 }
 
 namespace shade { namespace model {
+	struct lights_environment : json::named_translator, json::inplace_translator
+	{
+		std::string empty_;
+		const std::string& name() const override { return empty_; }
+		json::value pack(const void* ctx, json::ctx_env& env) override { return {}; }
+		bool unpack(const json::value& v, void* ctx, json::ctx_env& env) override { return false; }
+		void clean(void* ctx) const override { }
+		inplace_translator* inplace() override { return this; }
+		void pack(json::map& out, const void* ctx, json::ctx_env& env) override
+		{
+			auto& lights = static_cast<const bridge*>(ctx)->lights;
+			env["lights"] = (void*)(const void*)&lights;
+		}
+
+		bool unpack(const json::map& out, void* ctx, json::ctx_env& env) override
+		{
+			auto& lights = static_cast<const bridge*>(ctx)->lights;
+			env["lights"] = (void*)&lights;
+			return true;
+		}
+	};
+
 	void bridge::prepare(json::struct_translator& tr)
 	{
 		using my_type = bridge;
 		tr.PROP(hw);
 		tr.OPT_PROP(lights);
+		tr.add(std::make_unique<lights_environment>());
 		tr.OPT_PROP(groups);
 		tr.OPT_PRIV_PROP(hosts);
 	}

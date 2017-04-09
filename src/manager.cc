@@ -184,58 +184,65 @@ namespace shade {
 		using std::end;
 
 		for (auto& group : groups) {
-			bool erase_refs = false;
 			for (auto& lightref : group.second.lights) {
 				auto it = lights.find(lightref);
 				if (it == lights.end()) {
 					lightref.clear();
-					erase_refs = true;
 				} else
 					lightref = it->second.uniqueid;
 			}
-
-			if (erase_refs) {
-				// ...
-			}
 		}
 
-		std::vector<model::light_info> stg_lights;
+		vector_shared<model::light> stg_lights;
 		stg_lights.reserve(lights.size());
 		std::transform(begin(lights), end(lights), std::back_inserter(stg_lights), [](auto & in) {
-			model::light_info out;
-			out.id = std::move(in.second.uniqueid);
-			out.name = std::move(in.second.name);
-			out.type = std::move(in.second.modelid);
-			out.state.on = in.second.state.on;
-			out.state.bri = in.second.state.bri;
-			out.state.hue = in.second.state.hue;
-			out.state.sat = in.second.state.sat;
-			out.state.ct = in.second.state.ct;
-			out.state.xy[0] = in.second.state.xy[0];
-			out.state.xy[1] = in.second.state.xy[1];
-			out.state.mode = std::move(in.second.state.colormode);
-			return out;
+			model::color_mode mode;
+			if (in.second.state.colormode == "hs")
+				mode = model::mode::hue_sat{ in.second.state.hue, in.second.state.sat };
+			else if(in.second.state.colormode == "xy")
+				mode = model::mode::xy{ in.second.state.xy[0], in.second.state.xy[1] };
+			else if (in.second.state.colormode == "ct")
+				mode = model::mode::ct{ in.second.state.ct };
+
+			return model::light::make(
+				std::move(in.second.uniqueid),
+				std::move(in.second.name),
+				std::move(in.second.modelid),
+				in.second.state.on,
+				in.second.state.bri,
+				mode);
 		});
 
-		std::vector<model::group_info> stg_groups;
+		vector_shared<model::group> stg_groups;
 		stg_groups.reserve(groups.size());
-		std::transform(begin(groups), end(groups), std::back_inserter(stg_groups), [](auto & in) {
-			model::group_info out;
-			out.id = "group/" + in.first;
-			out.name = std::move(in.second.name);
-			out.type = std::move(in.second.type);
-			out.klass = std::move(in.second.klass);
-			out.state.any = in.second.state.any_on;
-			out.state.on = in.second.state.all_on;
-			out.state.bri = in.second.action.bri;
-			out.state.hue = in.second.action.hue;
-			out.state.sat = in.second.action.sat;
-			out.state.ct = in.second.action.ct;
-			out.state.xy[0] = in.second.action.xy[0];
-			out.state.xy[1] = in.second.action.xy[1];
-			out.state.mode = std::move(in.second.action.colormode);
-			out.lights = std::move(in.second.lights);
-			return out;
+		std::transform(begin(groups), end(groups), std::back_inserter(stg_groups), [&](auto & in) {
+			model::color_mode mode;
+			if (in.second.action.colormode == "hs")
+				mode = model::mode::hue_sat{ in.second.action.hue, in.second.action.sat };
+			else if (in.second.action.colormode == "xy")
+				mode = model::mode::xy{ in.second.action.xy[0], in.second.action.xy[1] };
+			else if (in.second.action.colormode == "ct")
+				mode = model::mode::ct{ in.second.action.ct };
+
+			vector_shared<model::light> refs;
+			refs.reserve(in.second.lights.size());
+			for (auto const& light : in.second.lights) {
+				for (auto& ref : stg_lights) {
+					if (ref->id() == light)
+						refs.push_back(ref);
+				}
+			}
+
+			return model::group::make(
+				"group/" + in.first,
+				std::move(in.second.name),
+				std::move(in.second.type),
+				std::move(in.second.klass),
+				in.second.state.all_on,
+				in.second.state.any_on,
+				in.second.action.bri,
+				mode,
+				std::move(refs));
 		});
 
 		storage_.bridge_config(bridgeid, std::move(stg_lights), std::move(stg_groups));

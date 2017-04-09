@@ -31,7 +31,7 @@ namespace shade {
 		void bridge_named(const std::string& id, const std::string& name, const std::string& mac, const std::string& modelid);
 		void bridge_connected(const std::string& id, const std::string& username);
 		void bridge_config(const std::string& id,
-			std::vector<model::light_info> lights,
-			std::vector<model::group_info> groups);
+			vector_shared<model::light> lights,
+			vector_shared<model::group> groups);
 	};
 }

@@ -140,8 +140,8 @@ namespace shade {
 	}
 
 	void storage::bridge_config(const std::string& id,
-		std::vector<model::light_info> lights,
-		std::vector<model::group_info> groups)
+		vector_shared<model::light> lights,
+		vector_shared<model::group> groups)
 	{
 		store_at_exit needs_storing{ this };
 		auto it = known_bridges.find(id);

@@ -1,5 +1,7 @@
 #pragma once
 #include <shade/model/host.h>
+#include <shade/model/light.h>
+#include <shade/model/group.h>
 #include <shade/model/base.h>
 #include <vector>
 
@@ -11,8 +13,8 @@ namespace shade { namespace model {
 	struct bridge {
 		bool seen = false;
 		hw_info hw;
-		std::vector<light_info> lights;
-		std::vector<group_info> groups;
+		vector_shared<light> lights;
+		vector_shared<group> groups;
 
 		static void prepare(json::struct_translator&);
 
