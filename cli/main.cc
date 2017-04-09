@@ -5,8 +5,8 @@
 
 int main() try {
 	boost::asio::io_service service;
-	shade::asio::network net{ service };
-	shade::asio::http browser{ service };
+	shade::io::asio::network net{ service };
+	shade::io::asio::http browser{ service };
 
 	client events{ service };
 	shade::manager hue{ "shade-cli", &events, &net, &browser };

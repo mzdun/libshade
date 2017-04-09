@@ -36,6 +36,10 @@ namespace menu {
 	{
 	}
 
+	void control::cancel()
+	{
+		io_.cancel();
+	}
 
 	inline static void hr(size_t length) {
 		putc('+', stdout);
@@ -124,6 +128,7 @@ namespace menu {
 		hr(length);
 		printf("> "); fflush(stdout);
 
+		io_.cancel();
 		boost::asio::async_read_until(io_, input_buffer_, '\n', [this](boost::system::error_code const& ec, const size_t read) {
 			if (!ec)
 			{

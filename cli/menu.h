@@ -50,6 +50,9 @@ namespace menu {
 			if (stack_.size() == 1)
 				show_menu();
 		}
+
+		void refresh() { show_menu(); }
+		void cancel();
 	private:
 		struct stack {
 			std::unique_ptr<current> menu;
