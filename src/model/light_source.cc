@@ -1,4 +1,5 @@
 #include <shade/model/light_source.h>
+#include <shade/hue_data.h>
 #include "model/json.h"
 
 namespace json {
@@ -65,6 +66,17 @@ namespace shade { namespace model {
 			: mode_{ mode::xy }
 			, xy_{ std::move(col) }
 		{
+		}
+
+		color color::from_json(const hue::light_state& state)
+		{
+			if (state.colormode == "hs")
+				return hue_sat{ state.hue, state.sat };
+			else if (state.colormode == "xy")
+				return xy{ state.xy[0], state.xy[1] };
+			else if (state.colormode == "ct")
+				return ct{ state.ct };
+			return {};
 		}
 	}
 

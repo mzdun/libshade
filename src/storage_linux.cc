@@ -1,9 +1,10 @@
-#include "shade/storage.h"
+#include <shade/storage.h>
 #include <cstdlib>
+#include "storage_internal.h"
 
-namespace shade {
-	constexpr char storage::confname[]; // why, gcc? It's a constexpr...
-	std::string storage::build_filename() {
+namespace shade { namespace storage {
+	// constexpr char storage::confname[]; // why, gcc? It's a constexpr...
+	std::string build_filename() {
 		std::string out;
 
 		const auto home = std::getenv("HOME");
@@ -15,8 +16,8 @@ namespace shade {
 
 		if (out.back() != '/')
 			out.push_back('/');
-		out.append(confname);
+		out.append(SHADE_STORAGE_CONFNAME);
 
 		return out;
 	}
-}
+} }

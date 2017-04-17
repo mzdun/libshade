@@ -1,5 +1,8 @@
-#include "shade/storage.h"
+#include <shade/storage.h>
+#include <shade/cache.h>
+#include <shade/model/bridge.h>
 #include "model/json.h"
+#include "storage_internal.h"
 #include <algorithm>
 #include <cstdio>
 #include <memory>
@@ -8,30 +11,15 @@ namespace json {
 	JSON_STATIC_DECL(shade::model::bridge);
 }
 
-namespace shade {
-	class store_at_exit {
-		bool store = false;
-		storage* parent;
-	public:
-		store_at_exit(storage* parent) : parent{ parent } {}
-		~store_at_exit() {
-			if (store)
-				parent->store();
-		}
-
-		auto& operator=(bool b) {
-			store = b;
-			return *this;
-		}
-
-		explicit operator bool() const {
-			return store;
-		}
-	};
+namespace shade { namespace storage {
+	static auto& filename() {
+		static auto name = build_filename();
+		return name;
+	}
 
 	struct file {
 		struct closer {
-			void operator()(FILE* f){
+			void operator()(FILE* f) {
 				std::fclose(f);
 			}
 		};
@@ -50,26 +38,32 @@ namespace shade {
 		}
 		return out;
 	}
-	void storage::load()
+
+	void load(cache& view)
 	{
 		auto in = file::open(filename().c_str());
 		if (!in)
 			return;
 
+		std::decay_t<decltype(view.bridges())> bridges;
+
 		auto object = json::from_string(contents(in.get()));
-		if (!json::unpack(known_bridges, object)) {
-			known_bridges.clear();
+		if (!json::unpack(bridges, object)) {
+			view.bridges({});
 			return;
 		}
 
-		for (auto& pair : known_bridges) {
-			pair.second.set_host(clientid, this);
+		for (auto& pair : bridges) {
+			pair.second->set_host(view.current_host());
+			pair.second->from_storage(pair.first, view.browser());
 		}
+
+		view.bridges(std::move(bridges));
 	}
 
-	void storage::store()
+	void store(const cache& view)
 	{
-		auto text = json::pack(known_bridges)
+		auto text = json::pack(view.bridges())
 			.to_string(json::value::options::indented());
 
 		auto out = file::open(filename().c_str(), "w");
@@ -77,88 +71,4 @@ namespace shade {
 			return;
 		fprintf(out.get(), "%s\n", text.c_str());
 	}
-
-	bool storage::bridge_located(const std::string& id, const std::string& base) {
-		store_at_exit needs_storing{ this };
-		auto it = known_bridges.find(id);
-		if (it == known_bridges.end()) {
-			auto& bridge = known_bridges[id];
-			bridge.set_host(clientid, this);
-			bridge.hw.base = base;
-			needs_storing = true;
-		} else {
-			if (it->second.hw.base != base) {
-				it->second.hw.base = base;
-				needs_storing = true;
-			}
-		}
-
-		// if storage needs refreshing, this is a new/refreshed bridge
-		return !!needs_storing;
-	}
-
-	void storage::bridge_named(const std::string& id,
-		const std::string& name, const std::string& mac,
-		const std::string& modelid)
-	{
-		store_at_exit needs_storing{ this };
-		auto it = known_bridges.find(id);
-		if (it == known_bridges.end()) {
-			auto& bridge = known_bridges[id];
-			bridge.set_host(clientid, this);
-			bridge.seen = true;
-			bridge.hw.name = name;
-			bridge.hw.mac = mac;
-			bridge.hw.modelid = modelid;
-			needs_storing = true;
-		} else {
-			auto& bridge = it->second;
-			bridge.seen = true;
-			if (bridge.hw.name != name
-				|| bridge.hw.mac != mac
-				|| bridge.hw.modelid != modelid) {
-				bridge.hw.name = name;
-				bridge.hw.mac = mac;
-				bridge.hw.modelid = modelid;
-				needs_storing = true;
-			}
-		}
-	}
-
-	void storage::bridge_connected(const std::string& id, const std::string& username)
-	{
-		store_at_exit needs_storing{ this };
-		auto it = known_bridges.find(id);
-		if (it == known_bridges.end()) {
-			auto& bridge = known_bridges[id];
-			bridge.set_host(clientid, this);
-			needs_storing = bridge.get_current()->update(username);
-		} else {
-			auto& bridge = it->second;
-			needs_storing = bridge.get_current()->update(username);
-		}
-	}
-
-	void storage::bridge_config(const std::string& id,
-		vector_shared<model::light> lights,
-		vector_shared<model::group> groups)
-	{
-		store_at_exit needs_storing{ this };
-		auto it = known_bridges.find(id);
-		if (it == known_bridges.end()) {
-			auto& bridge = known_bridges[id];
-			bridge.lights = std::move(lights);
-			bridge.groups = std::move(groups);
-			needs_storing = true;
-		} else {
-			auto& bridge = it->second;
-			if (bridge.lights != lights
-				|| bridge.groups != groups) {
-				bridge.lights = std::move(lights);
-				bridge.groups = std::move(groups);
-				needs_storing = true;
-			}
-		}
-	}
-
-}
+} }

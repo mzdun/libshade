@@ -7,6 +7,10 @@ namespace json {
 	struct struct_translator;
 }
 
+namespace shade { namespace hue {
+	struct light_state;
+} }
+
 namespace shade { namespace model {
 	namespace mode {
 		enum : int { max_value = 254 };
@@ -52,6 +56,9 @@ namespace shade { namespace model {
 			color(const xy&);
 			color(xy&&);
 			bool operator == (const color&) const;
+			bool operator != (const color& rhs) const {
+				return !(*this == rhs);
+			}
 
 			template<class Visitor>
 			void visit(Visitor visitor) const {
@@ -72,6 +79,8 @@ namespace shade { namespace model {
 				case mode::xy: visitor(xy_); break;
 				}
 			}
+
+			static color from_json(const hue::light_state& state);
 		};
 
 		inline int clamp(int v) { return v < 0 ? 0 : v > max_value ? max_value : v; }

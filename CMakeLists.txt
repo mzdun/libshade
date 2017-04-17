@@ -16,7 +16,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/json/inc)
 link_directories(${Boost_LIBRARY_DIRS})
 
 set(PROJECT_VERSION_MAJOR 0)
-set(PROJECT_VERSION_MINOR 2)
+set(PROJECT_VERSION_MINOR 4)
 set(PROJECT_VERSION_PATCH 0)
 set(PROJECT_VERSION_BUILD 1)
 set(PROJECT_VERSION_STABILITY "-alpha")
@@ -26,12 +26,14 @@ set(PROJECT_VERSION_FULL ${PROJECT_VERSION}${PROJECT_VERSION_STABILITY}+${PROJEC
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/inc/shade/version.in.h ${CMAKE_CURRENT_BINARY_DIR}/inc/shade/version.h)
 
 set(SRCS
+	src/cache.cc
 	src/manager.cc
 	src/discovery.cc
 	src/storage.cc
 )
 
 set(INCS
+	inc/shade/cache.h
 	inc/shade/manager.h
 	inc/shade/discovery.h
 	inc/shade/storage.h
@@ -71,17 +73,14 @@ set(SRCS_MODEL
 	src/model/light_source.cc
 	src/model/light.cc
 	src/model/group.cc
-	src/model/updatable.cc
 	src/model/host.cc
 	src/model/json.h
 )
 
 set(INCS_MODEL
-	inc/shade/model/base.h
 	inc/shade/model/light_source.h
 	inc/shade/model/light.h
 	inc/shade/model/group.h
-	inc/shade/model/updatable.h
 	inc/shade/model/bridge.h
 	inc/shade/model/host.h
 )

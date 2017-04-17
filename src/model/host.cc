@@ -1,4 +1,5 @@
-#include "shade/model/host.h"
+#include <shade/model/host.h>
+#include <shade/listener.h>
 #include "json.h"
 #include <algorithm>
 #include <cstdio>
@@ -33,7 +34,5 @@ namespace shade { namespace model {
 			selected_.insert(dev);
 		else
 			selected_.erase(dev);
-
-		store();
 	}
 } }

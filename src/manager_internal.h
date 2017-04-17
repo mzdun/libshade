@@ -1,81 +1,22 @@
 #include "shade/manager.h"
+#include "shade/hue_data.h"
 #include "json.hpp"
 
 using namespace std::literals;
 
-namespace shade { namespace api {
-	struct config {
-		std::string name;
-		std::string mac;
-		std::string modelid;
-	};
-
-	struct state_type {
-		bool all_on;
-		bool any_on;
-	};
-
-	struct action_type {
-		bool on;
-		int bri;
-		int hue;
-		int sat;
-		int ct;
-		std::array<double, 2> xy;
-		std::string colormode;
-	};
-
-	struct group {
-		std::string name;
-		std::string type;
-		std::string klass;
-		std::vector<std::string> lights;
-		state_type state;
-		action_type action;
-	};
-
-	struct light {
-		std::string name;
-		std::string modelid;
-		std::string uniqueid;
-		action_type state;
-	};
-
-	struct error_type {
-		int type;
-		std::string address;
-		std::string description;
-	};
-
-	enum class errors {
-		unauthorised_user = 1,
-		invalid_json = 2,
-		resource_404 = 3,
-		method_unsupported = 4,
-		missing_param = 5,
-		parameter_404 = 6,
-		invalid_value = 7,
-		param_read_only = 8,
-		too_many_items = 11,
-		portal_required = 12,
-		button_not_pressed = 101,
-		internal_error = 901
-	};
-} }
-
 namespace json {
-	JSON_STRUCT(shade::api::config) {
+	JSON_STRUCT(shade::hue::config) {
 		JSON_PROP(name);
 		JSON_PROP(mac);
 		JSON_PROP(modelid);
 	}
 
-	JSON_STRUCT(shade::api::state_type) {
+	JSON_STRUCT(shade::hue::group_state) {
 		JSON_PROP(all_on);
 		JSON_PROP(any_on);
 	};
 
-	JSON_STRUCT(shade::api::action_type) {
+	JSON_STRUCT(shade::hue::light_state) {
 		JSON_PROP(on);
 		JSON_PROP(bri);
 		JSON_PROP(hue);
@@ -85,7 +26,7 @@ namespace json {
 		JSON_PROP(colormode);
 	};
 
-	JSON_STRUCT(shade::api::group) {
+	JSON_STRUCT(shade::hue::group) {
 		JSON_PROP(name);
 		JSON_PROP(type);
 		JSON_OPT_NAMED_PROP("class", klass);
@@ -94,14 +35,14 @@ namespace json {
 		JSON_PROP(action);
 	};
 
-	JSON_STRUCT(shade::api::light) {
+	JSON_STRUCT(shade::hue::light) {
 		JSON_PROP(name);
 		JSON_PROP(modelid);
 		JSON_PROP(uniqueid);
 		JSON_PROP(state);
 	};
 
-	JSON_STRUCT(shade::api::error_type) {
+	JSON_STRUCT(shade::hue::error_type) {
 		JSON_PROP(type);
 		JSON_PROP(address);
 		JSON_PROP(description);
@@ -132,15 +73,6 @@ namespace shade {
 			void on_headers(int status, const tangle::cstring& reason, const http::headers& headers) override
 			{
 				status_ = status;
-
-#if 0
-				std::cout << status << " " << reason << "\n";
-				for (const auto& pair : headers) {
-					for (const auto& value : pair.second) {
-						std::cout << pair.first << ": " << value << "\n";
-					}
-				}
-#endif
 			}
 
 			void on_data(const char* data, size_t length) override
@@ -234,9 +166,9 @@ namespace shade {
 		return pred;
 	}
 
-	static inline bool get_error(api::error_type& error, json::value doc)
+	static inline bool get_error(hue::error_type& error, json::value doc)
 	{
-		std::vector<std::unordered_map<std::string, api::error_type>> ctx;
+		std::vector<std::unordered_map<std::string, hue::error_type>> ctx;
 		if (!unpack_json(ctx, doc))
 			return false;
 		if (ctx.empty() || ctx.front().empty())
@@ -250,12 +182,12 @@ namespace shade {
 		return true;
 	}
 
-	static inline bool get_error(api::errors& code, json::value doc)
+	static inline bool get_error(hue::errors& code, json::value doc)
 	{
-		api::error_type err;
+		hue::error_type err;
 		if (!get_error(err, doc))
 			return false;
-		code = (api::errors)err.type;
+		code = (hue::errors)err.type;
 		return true;
 	}
 }

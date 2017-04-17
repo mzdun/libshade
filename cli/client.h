@@ -1,23 +1,49 @@
 #pragma once
 #include "menu.h"
 #include <shade/manager.h>
+#include <shade/listener.h>
 
 class first_screen;
-struct client : shade::manager::listener {
+
+struct client
+	: shade::listener::manager
+	, shade::listener::connection
+	, shade::listener::bridge
+{
 	friend class first_screen;
 
-	std::unordered_map<std::string, shade::model::bridge> local_bridges_;
+	struct bridge_info {
+		std::unordered_set<std::string> selected;
+		shade::model::hw_info hw;
+	};
+	std::unordered_map<std::string, bridge_info> local_;
 	shade::manager* manager_ = nullptr;
 	menu::control menu_;
 
 	client(boost::asio::io_service& service);
-	void on_previous(std::unordered_map<std::string, shade::model::bridge> const&) override;
-	void on_bridge(const std::string& bridgeid) override;
-	void on_connecting(std::string const& bridgeid) override;
-	void on_connected(std::string const& bridgeid) override;
-	void on_connect_timeout(std::string const& bridgeid) override;
-	void on_refresh(std::string const& bridgeid) override;
+
+	// shade::listener::manager
+	void onload(const shade::cache&) override;
+	void onbridge(const std::shared_ptr<shade::model::bridge>&) override;
+	shade::listener::connection* connection_listener(const std::shared_ptr<shade::model::bridge>&) { return this; }
+	shade::listener::bridge* bridge_listener(const std::shared_ptr<shade::model::bridge>&) { return this; }
+
+	// shade::listener::connection
+	void onconnecting(const std::shared_ptr<shade::model::bridge>&) override;
+	void onconnected(const std::shared_ptr<shade::model::bridge>&) override;
+	void onfailed(const std::shared_ptr<shade::model::bridge>&) override;
+	void onlost(const std::shared_ptr<shade::model::bridge>&) override;
+
+	// shade::listener::bridge
+	void update_start(const std::shared_ptr<shade::model::bridge>&) override;
+	void source_added(const std::shared_ptr<shade::model::light_source>&) override;
+	void source_removed(const std::shared_ptr<shade::model::light_source>&) override;
+	void source_changed(const std::shared_ptr<shade::model::light_source>&) override;
+	void update_end(const std::shared_ptr<shade::model::bridge>&) override;
 
 private:
+	bool fake_hb = true;
+	bool heartbeat_on() const;
+	void heartbeat();
 	void select_items();
 };

@@ -1,6 +1,9 @@
 #include "client.h"
 #include <iostream>
 
+using std::begin;
+using std::end;
+
 class first_screen : public menu::current {
 	client* parent_;
 	std::string title_;
@@ -38,13 +41,13 @@ public:
 	void call(size_t i) override { return items_[i]->call(); }
 };
 
-inline auto device_state(const std::string& text)
+inline auto device_state(const std::shared_ptr<shade::model::light_source>& src)
 {
 	return [=](int bri) {
 		constexpr int max_bri = 254;
 
 		std::string out;
-		out.reserve(2 + 4 + text.length());
+		out.reserve(2 + 4 + src->name().length());
 		out.push_back('[');
 		if (bri > shade::model::mode::max_value) {
 			out.push_back(' ');
@@ -59,7 +62,7 @@ inline auto device_state(const std::string& text)
 		}
 		out.push_back(']');
 		out.push_back(' ');
-		out.append(text);
+		out.append(src->name());
 		return out;
 	};
 }
@@ -87,9 +90,9 @@ inline auto tick_out(const std::string& text)
 	};
 }
 
-inline auto is_selected(shade::model::host* host, const std::string& deviceid)
+inline auto is_selected(shade::model::host& host, const std::string& deviceid)
 {
-	return [=]() -> bool { return host->is_selected(deviceid); };
+	return [=]() -> bool { return host.is_selected(deviceid); };
 }
 
 void first_screen::refresh()
@@ -107,18 +110,13 @@ bool first_screen::device_list_changed()
 {
 	bool changed = false;
 	auto manager = parent_->manager_;
-	for (auto const& pair : manager->bridges()) {
-		auto& local_bridge = parent_->local_bridges_[pair.first];
-		auto const& client = parent_->manager_->current_client();
-
-		if (!local_bridge.get_current())
-			local_bridge.set_host_from(*pair.second.get_current());
-
-		auto& selected = pair.second.get_current()->selected();
-		auto& local = local_bridge.get_current()->selected();
+	for (auto const& pair : manager->view().bridges()) {
+		auto& selected = pair.second->host().selected();
+		auto& local = parent_->local_[pair.first].selected;
+		auto const& client = parent_->manager_->current_host();
 
 		if (selected != local) {
-			local_bridge.get_current()->batch_update(selected);
+			parent_->local_[pair.first].selected = selected;
 			changed = true;
 		}
 	}
@@ -136,13 +134,13 @@ void first_screen::rebuild_list()
 	std::vector<std::unique_ptr<item>> items;
 	size_t length = 0;
 	size_t distinct_bridges = 0;
-	for (auto const& pair : manager->bridges()) {
+	for (auto const& pair : manager->view().bridges()) {
 		auto const& bridgeid = pair.first;
 		auto const& bridge = pair.second;
 
-		auto const& client = *bridge.get_current();
-		length += count_devices(bridge.groups, client, bridge.hw, distinct_bridges);
-		length += count_devices(bridge.lights, client, bridge.hw, distinct_bridges);
+		auto const& host = bridge->host();
+		length += count_devices(bridge->groups(), host, bridge->hw(), distinct_bridges);
+		length += count_devices(bridge->lights(), host, bridge->hw(), distinct_bridges);
 	}
 	items.reserve(length + 2);
 
@@ -151,48 +149,48 @@ void first_screen::rebuild_list()
 		void set(int& devices, std::string& title, const shade::model::bridge& bridge) {
 			if (first) {
 				first = false;
-				title = devices ? "Multiple bridges" : bridge.hw.name;
+				title = devices ? "Multiple bridges" : bridge.hw().name;
 				++devices;
 			}
 		}
 	};
 	int devices = 0;
 	std::unordered_set<std::string> dummy;
-	for (auto const& pair : manager->bridges()) {
+	for (auto const& pair : manager->view().bridges()) {
 		auto bridgeid = pair.first;
 		auto const& bridge = pair.second;
-		auto const& selection = bridge.get_current()->selected();
+		auto const& selection = bridge->host().selected();
 		counter cnt;
 
-		for (auto const& group : bridge.groups) {
+		for (auto const& group : bridge->groups()) {
 			auto id = group->id();
 			if (!selection.count(id))
 				continue;
 
-			cnt.set(devices, title_, bridge);
+			cnt.set(devices, title_, *bridge);
 			items.push_back(item::simple(
 				device_brightness(group),
-				device_state(group->name()),
+				device_state(group),
 				[=]() {}
 			));
 		}
 	}
 	items.push_back(item::separator());
-	for (auto const& pair : manager->bridges()) {
+	for (auto const& pair : manager->view().bridges()) {
 		auto bridgeid = pair.first;
 		auto const& bridge = pair.second;
-		auto const& selection = bridge.get_current()->selected();
+		auto const& selection = bridge->host().selected();
 		counter cnt;
 
-		for (auto const& light : bridge.lights) {
+		for (auto const& light : bridge->lights()) {
 			auto id = light->id();
 			if (!selection.count(id))
 				continue;
 
-			cnt.set(devices, title_, bridge);
+			cnt.set(devices, title_, *bridge);
 			items.push_back(item::simple(
 				device_brightness(light),
-				device_state(light->name()),
+				device_state(light),
 				[=]() {}
 			));
 		}
@@ -202,35 +200,58 @@ void first_screen::rebuild_list()
 		title_ = "Choose devices";
 
 	items.push_back(item::special(
-		[]() { return false; },
+		[=]() { return parent_->heartbeat_on(); },
 		tick_out("Refresh state"),
-		[]() {}));
+		[=]() { parent_->heartbeat(); }));
 	items.push_back(item::special("Select devices", [this]() { parent_->select_items(); }));
 
 	items_.swap(items);
 }
 
-void print(const shade::model::light& light, bool is_new)
+enum class source {
+	same,
+	added,
+	changed,
+	removed
+};
+
+void print(const shade::model::light& light, source type)
 {
-	printf("        [%s]: '%s' (%s) %s [%d]", light.id().c_str(),
+	printf("        [%s]: '%s' (%s) %s [%d%%]", light.id().c_str(),
 		light.name().c_str(), light.type().c_str(),
 		light.on() ? "ON" : "OFF",
-		light.bri());
+		shade::model::mode::clamp(light.bri()) * 100 / shade::model::mode::max_value);
 
-	if (is_new) printf(" NEW LIGHT");
+	switch (type) {
+	case source::added: printf(" NEW LIGHT"); break;
+	case source::removed: printf(" REMOVED LIGHT"); break;
+	}
+
 	printf("\n");
 }
 
-void print(const shade::model::group& group, bool is_new)
+void print(const shade::model::group& group, source type)
 {
-	printf("        [%s]: '%s' (%s) %s [%d]", group.id().c_str(),
+	printf("        [%s]: '%s' (%s) %s [%d%%]", group.id().c_str(),
 		group.name().c_str(),
 		group.type() == "Room" ? group.klass().c_str() : group.type().c_str(),
 		group.some() ? (group.on() ? "ON" : "SOME") : "OFF",
-		group.bri());
+		shade::model::mode::clamp(group.bri()) * 100 / shade::model::mode::max_value);
 
-	if (is_new) printf(" NEW GROUP");
+	switch (type) {
+	case source::added: printf(" NEW GROUP"); break;
+	case source::removed: printf(" REMOVED GROUP"); break;
+	}
+
 	printf("\n");
+}
+
+void print(const shade::model::light_source& light, source type)
+{
+	if (light.is_group())
+		print((const shade::model::group&)light, type);
+	else
+		print((const shade::model::light&)light, type);
 }
 
 client::client(boost::asio::io_service& service)
@@ -238,37 +259,38 @@ client::client(boost::asio::io_service& service)
 {
 }
 
-void client::on_previous(std::unordered_map<std::string, shade::model::bridge> const& bridges)
+// shade::listener::manager
+void client::onload(const shade::cache& view)
 {
-	if (bridges.empty()) {
+	if (view.bridges().empty()) {
 		printf("WAITING FOR BRIDGES...\n");
 	} else {
-		local_bridges_ = bridges;
-		for (auto& bridge : local_bridges_) {
-			bridge.second.rebind_current();
-			bridge.second.get_current()->clear_selection();
+		for (auto& pair : view.bridges()) {
+			auto& ref = local_[pair.first];
+			ref.hw = pair.second->hw();
+			ref.selected.clear();
 		}
 
-		for (auto const& bridge : bridges) {
+		for (auto const& bridge : view.bridges()) {
 			printf("BRIDGE %s:\n", bridge.first.c_str());
-			auto & hw = bridge.second.hw;
-			auto & client = *bridge.second.get_current();
+			auto & hw = bridge.second->hw();
+			auto & client = bridge.second->host();
 			printf("    base:     %s\n", hw.base.c_str());
 			printf("    name:     %s\n", hw.name.c_str());
 			printf("    mac:      %s\n", hw.mac.c_str());
 			printf("    modelid:  %s\n", hw.modelid.c_str());
 			printf("    client:   %s\n", client.name().c_str());
 			printf("    username: %s\n", client.username().c_str());
-			if (!bridge.second.lights.empty()) {
+			if (!bridge.second->lights().empty()) {
 				printf("    lights:\n");
-				for (auto const& light : bridge.second.lights) {
-					print(*light, false);
+				for (auto const& light : bridge.second->lights()) {
+					print(*light, source::same);
 				}
 			}
-			if (!bridge.second.groups.empty()) {
+			if (!bridge.second->groups().empty()) {
 				printf("    groups:\n");
-				for (auto const& group : bridge.second.groups) {
-					print(*group, false);
+				for (auto const& group : bridge.second->groups()) {
+					print(*group, source::same);
 					for (auto& ref : group->lights()) {
 						printf("            -> %s\n", ref->id().c_str());
 					}
@@ -285,115 +307,97 @@ void client::on_previous(std::unordered_map<std::string, shade::model::bridge> c
 	menu_.show_menu(std::make_unique<first_screen>(this));
 }
 
-void client::on_bridge(std::string const& bridgeid)
+void client::onbridge(const std::shared_ptr<shade::model::bridge>& bridge)
 {
-	auto const& bridge = manager_->bridge(bridgeid);
-	auto& local = local_bridges_[bridgeid];
+	auto& local = local_[bridge->id()];
 	printf("... >> GOT BASIC CONFIG\n");
-	if (bridge.hw.base != local.hw.base) {
-		printf("    base: [%s]\n", bridge.hw.base.c_str());
-		local.hw.base = bridge.hw.base;
+	auto& hw = bridge->hw();
+	if (hw.base != local.hw.base) {
+		printf("    base: [%s]\n", hw.base.c_str());
+		local.hw.base = hw.base;
 	}
-	if (bridge.hw.name != local.hw.name) {
-		printf("    name: [%s]\n", bridge.hw.name.c_str());
-		local.hw.name = bridge.hw.name;
+	if (hw.name != local.hw.name) {
+		printf("    name: [%s]\n", hw.name.c_str());
+		local.hw.name = hw.name;
 	}
-	if (bridge.hw.mac != local.hw.mac) {
-		printf("    mac: [%s]\n", bridge.hw.mac.c_str());
-		local.hw.mac = bridge.hw.mac;
+	if (hw.mac != local.hw.mac) {
+		printf("    mac: [%s]\n", hw.mac.c_str());
+		local.hw.mac = hw.mac;
 	}
-	if (bridge.hw.modelid != local.hw.modelid) {
-		printf("    modelid: [%s]\n", bridge.hw.modelid.c_str());
-		local.hw.modelid = bridge.hw.modelid;
+	if (hw.modelid != local.hw.modelid) {
+		printf("    modelid: [%s]\n", hw.modelid.c_str());
+		local.hw.modelid = hw.modelid;
 	}
 	menu_.refresh();
+
+	if (bridge->host().username().empty()) {
+		manager_->connect(bridge);
+		return;
+	}
+
+	// TODO: heartbeat for bridge
 }
 
-void client::on_connecting(std::string const&)
+// shade::listener::connection
+void client::onconnecting(const std::shared_ptr<shade::model::bridge>&)
 {
 	printf("\nPLEASE PRESS THE BUTTON...\n");
 }
 
-void client::on_connected(std::string const& bridgeid)
+void client::onconnected(const std::shared_ptr<shade::model::bridge>& bridge)
 {
-	auto& bridge = manager_->bridge(bridgeid);
 	printf("THANK YOU.\n");
-	printf("    username: [%s]\n", bridge.get_current()->username().c_str());
+	printf("    username: [%s]\n", bridge->host().username().c_str());
 	menu_.refresh();
+	// TODO: heartbeat for bridge
 }
 
-void client::on_connect_timeout(std::string const& bridgeid)
+void client::onfailed(const std::shared_ptr<shade::model::bridge>&)
 {
 	printf("BUTTON NOT PRESSED IN 30s.\n");
 	menu_.cancel();
 }
 
-template <typename T>
-static auto find_if(const T& container, const std::string& id)
+void client::onlost(const std::shared_ptr<shade::model::bridge>& bridge)
 {
-	using std::begin;
-	using std::end;
-
-	return std::find_if(begin(container), end(container), [&](auto const& item) { return item->id() == id; });
-}
-
-template <typename T>
-void print_list(T& local, const T& update, const char* title)
-{
-	using std::begin;
-	using std::end;
-
-	bool removed = false;
-	bool header = false;
-	for (auto& loc : local) {
-		auto it = find_if(update, loc->id());
-		if (it == end(update)) {
-			if (!header) {
-				header = true;
-				printf("    %s:\n", title);
-			}
-			printf("        [%s] REMOVED\n", loc->id().c_str());
-			removed = true;
-			continue;
-		}
-		if (**it != *loc) {
-			*loc = **it;
-			if (!header) {
-				header = true;
-				printf("    %s:\n", title);
-			}
-			print(*loc, false);
-		}
-	}
-
-	if (removed) {
-		auto it = std::remove_if(begin(local), end(local), [&](const auto& item) { return find_if(update, item->id()) == end(update); });
-		local.erase(it, end(local));
-		local.shrink_to_fit();
-	}
-
-	for (auto const& upd : update) {
-		auto it = find_if(local, upd->id());
-		if (it == end(local)) {
-			if (!header) {
-				header = true;
-				printf("    %s:\n", title);
-			}
-			print(*upd, true);
-			local.push_back(upd);
-			continue;
-		}
-	}
-}
-
-void client::on_refresh(std::string const& bridgeid)
-{
-	auto const& bridge = manager_->bridge(bridgeid);
-	auto& local = local_bridges_[bridgeid];
-	printf("... >> GOT CURRENT CONFIG\n");
-	print_list(local.lights, bridge.lights, "lights");
-	print_list(local.groups, bridge.groups, "groups");
+	printf("CONNECTION LOST.\n");
 	menu_.refresh();
+}
+
+// shade::listener::bridge
+void client::update_start(const std::shared_ptr<shade::model::bridge>&)
+{
+	printf("... >> GOT CURRENT CONFIG\n");
+}
+
+void client::source_added(const std::shared_ptr<shade::model::light_source>& light)
+{
+	print(*light, source::added);
+}
+
+void client::source_removed(const std::shared_ptr<shade::model::light_source>& light)
+{
+	print(*light, source::removed);
+}
+
+void client::source_changed(const std::shared_ptr<shade::model::light_source>& light)
+{
+	print(*light, source::changed);
+}
+
+void client::update_end(const std::shared_ptr<shade::model::bridge>&)
+{
+	menu_.refresh();
+}
+
+bool client::heartbeat_on() const
+{
+	return fake_hb;
+}
+
+void client::heartbeat()
+{
+	fake_hb = !fake_hb;
 }
 
 void client::select_items()
@@ -401,32 +405,32 @@ void client::select_items()
 	using namespace menu::impl;
 	std::vector<std::unique_ptr<item>> items;
 	size_t length = 0;
-	for (auto const& bridge : manager_->bridges()) {
-		length += bridge.second.groups.size();
-		length += bridge.second.lights.size();
+	for (auto const& bridge : manager_->view().bridges()) {
+		length += bridge.second->groups().size();
+		length += bridge.second->lights().size();
 	}
 	items.reserve(length + 1);
 
-	for (auto& bridge : manager_->bridges()) {
-		auto client = bridge.second.get_current();
-		for (auto const& group : bridge.second.groups) {
+	for (auto& bridge : manager_->view().bridges()) {
+		auto& host = bridge.second->host();
+		for (auto const& group : bridge.second->groups()) {
 			auto id = group->id();
 			items.push_back(item::simple(
-				is_selected(client, id),
+				is_selected(host, id),
 				tick_out(group->name()),
-				[=]() { client->switch_selection(id); }
+				[&]() { host.switch_selection(id); manager_->store_cache(); }
 			));
 		}
 	}
 	items.push_back(item::separator());
-	for (auto const& bridge : manager_->bridges()) {
-		auto client = bridge.second.get_current();
-		for (auto const& light : bridge.second.lights) {
+	for (auto const& bridge : manager_->view().bridges()) {
+		auto& host = bridge.second->host();
+		for (auto const& light : bridge.second->lights()) {
 			auto id = light->id();
 			items.push_back(item::simple(
-				is_selected(client, id),
+				is_selected(host, id),
 				tick_out(light->name()),
-				[=]() { client->switch_selection(id); }
+				[&]() { host.switch_selection(id); manager_->store_cache(); }
 			));
 		}
 	}

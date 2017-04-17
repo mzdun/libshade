@@ -1,8 +1,9 @@
-#include "shade/storage.h"
+#include <shade/storage.h>
 #include <windows.h>
 #include <memory>
+#include "storage_internal.h"
 
-namespace shade {
+namespace shade { namespace storage {
 	auto getenv(const char* name) {
 		auto size = GetEnvironmentVariableA(name, nullptr, 0);
 		if (size) {
@@ -13,7 +14,7 @@ namespace shade {
 		return std::unique_ptr<char[]>{};
 	}
 
-	std::string storage::build_filename() {
+	std::string build_filename() {
 		std::string out;
 
 		auto home = getenv("HOME");
@@ -33,8 +34,8 @@ namespace shade {
 
 		if (out.back() != '\\')
 			out.push_back('\\');
-		out.append(confname);
+		out.append(SHADE_STORAGE_CONFNAME);
 
 		return out;
 	}
-}
+} }
