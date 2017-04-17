@@ -3,8 +3,7 @@
 #include <shade/discovery.h>
 #include <shade/cache.h>
 #include <shade/io/http.h>
-
-namespace json { struct value; }
+#include <json.hpp>
 
 namespace shade {
 	namespace hue {
@@ -24,6 +23,61 @@ namespace shade {
 		virtual ~heart_monitor() = default;
 	};
 
+	class manager;
+	class change_def {
+		friend class manager;
+		json::map opts_;
+		void erase(const std::string& key)
+		{
+			auto it = opts_.find(key);
+			if (it != opts_.end())
+				opts_.erase(it);
+		}
+	public:
+		change_def& on(bool val)
+		{
+			opts_.add("on", val);
+			return *this;
+		}
+
+		change_def& bri(int val)
+		{
+			opts_.add("bri", model::mode::clamp(val));
+			return *this;
+		}
+
+		change_def& color(const model::color_mode& color)
+		{
+			erase("hue");
+			erase("sat");
+			erase("xy");
+			erase("ct");
+			color.visit(model::mode::combine(
+				[&](const model::mode::hue_sat& hs) { opts_.add("hue", hs.hue).add("sat", hs.sat); },
+				[&](const model::mode::xy& xy) { json::vector v; v.add(xy.x).add(xy.y); opts_.add("xy", v); },
+				[&](const model::mode::ct& ct) { opts_.add("ct", ct.val); }
+			));
+			return *this;
+		}
+
+		change_def& erase_on()
+		{
+			erase("on");
+			return *this;
+		}
+
+		change_def& erase_bri()
+		{
+			erase("bri");
+			return *this;
+		}
+
+		change_def& erase_color()
+		{
+			return color({});
+		}
+	};
+
 	class manager {
 	public:
 		manager(const std::string& name, listener::manager* listener, io::network* net, io::http* browser);
@@ -35,6 +89,7 @@ namespace shade {
 		void search();
 		void connect(const std::shared_ptr<model::bridge>&);
 		std::shared_ptr<heart_monitor> defib(const std::shared_ptr<model::bridge>&);
+		void update(const std::shared_ptr<shade::model::light_source>& source, const change_def& change);
 	private:
 		listener::manager* listener_;
 		io::network* net_;
@@ -46,5 +101,7 @@ namespace shade {
 
 		void connect(const std::shared_ptr<model::bridge>&, std::chrono::nanoseconds sofar);
 		void getuser(const std::shared_ptr<model::bridge>& bridge, int status, json::value doc, std::chrono::nanoseconds sofar, std::chrono::steady_clock::time_point then);
+
+		void do_update(const std::shared_ptr<shade::model::light_source>& source, const change_def& change);
 	};
 }

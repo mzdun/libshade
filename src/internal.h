@@ -79,9 +79,9 @@ namespace shade {
 			{
 				if (length == 0) {
 					auto value = json::from_string(data_.data(), data_.size());
-					if (value.is<json::NULLPTR>()) {
-						printf("%s\n", std::string{ data_.data(), data_.size() }.c_str());
-					}
+					// if (value.is<json::NULLPTR>()) {
+					// 	printf("%s\n", std::string{ data_.data(), data_.size() }.c_str());
+					// }
 					data_.clear();
 					handler_(status_, value);
 					load_handler_.reset(); // this will start a destroy cascade

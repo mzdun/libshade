@@ -113,10 +113,9 @@ namespace shade {
 		// 2. gather the (id, location) pair
 		auto handler = std::make_shared<discovery_handler>(this, std::move(callback), std::move(done));
 		current_search_ = udp_socket_->read_datagram(ssdp_timeout, [handler](const uint8_t* data, size_t length, bool success) {
-			if (!success) {
-				printf("FAILED\n");
+			if (!success)
 				return;
-			}
+
 			if (length == 0) {
 				handler->on_done();
 				return;

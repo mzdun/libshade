@@ -59,8 +59,11 @@ namespace shade {
 		std::unordered_map<std::string, hue::group> groups,
 		listener::storage* storage, listener::bridge* changes)
 	{
-		if (bridge->bridge_lights(std::move(lights), std::move(groups), changes))
+		auto l_size = lights.size();
+		auto g_size = groups.size();
+		if (bridge->bridge_lights(std::move(lights), std::move(groups), changes)) {
 			storage->mark_dirty();
+		}
 	}
 
 }

@@ -56,6 +56,10 @@ namespace shade { namespace storage {
 		for (auto& pair : bridges) {
 			pair.second->set_host(view.current_host());
 			pair.second->from_storage(pair.first, view.browser());
+			for (auto& source : pair.second->lights())
+				source->bridge(pair.second);
+			for (auto& source : pair.second->groups())
+				source->bridge(pair.second);
 		}
 
 		view.bridges(std::move(bridges));

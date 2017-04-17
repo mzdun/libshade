@@ -148,6 +148,7 @@ namespace shade { namespace model {
 	void light_source::prepare(json::struct_translator& tr)
 	{
 		using my_type = light_source;
+		tr.NAMED_PROP("index", idx_);
 		tr.PRIV_PROP(id);
 		tr.PRIV_PROP(name);
 		tr.PRIV_PROP(type);

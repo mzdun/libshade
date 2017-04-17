@@ -14,8 +14,8 @@ namespace shade { namespace model {
 		bool operator == (const light&) const;
 		bool update(const std::string& key, hue::light json);
 
-		static auto make(std::string id, std::string name, std::string type, bool on, int bri, color_mode value) {
-			return std::make_shared<light>(std::move(id), std::move(name), std::move(type), on, bri, std::move(value));
+		static auto make(const std::shared_ptr<model::bridge>& owner, std::string idx, std::string id, std::string name, std::string type, bool on, int bri, color_mode value) {
+			return std::make_shared<light>(owner, std::move(idx), std::move(id), std::move(name), std::move(type), on, bri, std::move(value));
 		}
 
 		static void prepare(json::struct_translator& tr)

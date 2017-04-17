@@ -67,7 +67,7 @@ namespace shade {
 					if (reconnect(doc))
 						return;
 
-					printf("GETTING GROUPS: %d\n%s\n", status, doc.to_string(json::value::options::indented()).c_str());
+					// printf("GETTING GROUPS: %d\n%s\n", status, doc.to_string(json::value::options::indented()).c_str());
 				}));
 				return;
 			}
@@ -75,7 +75,7 @@ namespace shade {
 			if (reconnect(doc))
 				return;
 
-			printf("GETTING LIGHTS: %d\n%s\n", status, doc.to_string(json::value::options::indented()).c_str());
+			// printf("GETTING LIGHTS: %d\n%s\n", status, doc.to_string(json::value::options::indented()).c_str());
 		}));
 	}
 }

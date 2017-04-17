@@ -193,6 +193,8 @@ namespace shade { namespace model {
 				continue;
 
 			auto new_source = model::light::make(
+				shared_from_this(),
+				in.first,
 				std::move(in.second.uniqueid),
 				std::move(in.second.name),
 				std::move(in.second.modelid),
@@ -238,6 +240,8 @@ namespace shade { namespace model {
 				continue;
 
 			auto new_source = model::group::make(
+				shared_from_this(),
+				in.first,
 				"group/" + in.first,
 				std::move(in.second.name),
 				std::move(in.second.type),

@@ -90,6 +90,7 @@ namespace shade { namespace model {
 		auto key_id = "group/" + key;
 		auto refs = referenced(json.lights, resource);
 
+		UPDATE_SOURCE(index, key);
 		UPDATE_SOURCE(id, key_id);
 		UPDATE_SOURCE(name, json.name);
 		UPDATE_SOURCE(type, json.type);

@@ -18,6 +18,7 @@ namespace shade { namespace model {
 		auto mode = color_mode::from_json(json.state);
 		auto brightness = mode::clamp(json.state.bri);
 
+		UPDATE_SOURCE(index, key);
 		UPDATE_SOURCE(id, json.uniqueid);
 		UPDATE_SOURCE(name, json.name);
 		UPDATE_SOURCE(type, json.modelid);

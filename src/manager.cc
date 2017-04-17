@@ -3,7 +3,6 @@
 #include <shade/heartbeat.h>
 #include <shade/storage.h>
 #include <shade/io/connection.h>
-#include <json.hpp>
 #include "internal.h"
 #include <algorithm>
 
@@ -176,5 +175,50 @@ namespace shade {
 		auto beat = std::make_shared<heartbeat>(&view_, listener_, net_, bridge);
 		beat->start();
 		return std::make_shared<monitor>(std::move(beat));
+	}
+
+	template <typename Pred>
+	inline void group_cutoff(const std::shared_ptr<shade::model::light_source>& source, Pred pred)
+	{
+		if (source->is_group()) {
+			auto group = std::static_pointer_cast<shade::model::group>(source);
+			if (group->lights().size() < 2) {
+				for (auto const& light : group->lights()) {
+					pred(light);
+				}
+				return;
+			}
+		}
+
+		pred(source);
+	}
+
+	void manager::update(const std::shared_ptr<shade::model::light_source>& source, const change_def& change)
+	{
+		if (source->is_group()) {
+			auto group = std::static_pointer_cast<shade::model::group>(source);
+			if (group->lights().size() < 10) {
+				for (auto const& light : group->lights()) {
+					do_update(light, change);
+				}
+				return;
+			}
+		}
+
+		do_update(source, change);
+	}
+
+	void manager::do_update(const std::shared_ptr<shade::model::light_source>& source, const change_def& change)
+	{
+		auto bridge = source->bridge();
+		std::string res{ source->is_group() ? "/groups/" : "/lights/" };
+		res.append(source->index());
+		res.append(source->is_group() ? "/action" : "/state");
+
+		bridge->logged(view_.browser()).put(
+			res,
+			change.opts_.to_string(),
+			io::make_json_client([](auto, auto) {})
+		);
 	}
 }

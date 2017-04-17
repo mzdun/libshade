@@ -14,8 +14,8 @@ namespace shade { namespace model {
 		vector_shared<light> lights_;
 	public:
 		group() = default;
-		group(std::string id, std::string name, std::string type, std::string klass, bool on, bool some, int bri, color_mode value, vector_shared<light> lights)
-			: light_source{ std::move(id), std::move(name), std::move(type), on, bri, std::move(value) }
+		group(const std::shared_ptr<model::bridge>& owner, std::string idx, std::string id, std::string name, std::string type, std::string klass, bool on, bool some, int bri, color_mode value, vector_shared<light> lights)
+			: light_source{ owner, std::move(idx), std::move(id), std::move(name), std::move(type), on, bri, std::move(value) }
 			, some_{ some }
 			, klass_{ std::move(klass) }
 			, lights_ { std::move(lights) }
@@ -31,8 +31,8 @@ namespace shade { namespace model {
 		bool operator == (const group&) const;
 		bool update(const std::string& key, hue::group json, const vector_shared<light>& resource);
 
-		static auto make(std::string id, std::string name, std::string type, std::string klass, bool on, bool some, int bri, color_mode value, vector_shared<light> lights) {
-			return std::make_shared<group>(std::move(id), std::move(name), std::move(type), std::move(klass), on, some, bri, std::move(value), std::move(lights));
+		static auto make(const std::shared_ptr<model::bridge>& owner, std::string idx, std::string id, std::string name, std::string type, std::string klass, bool on, bool some, int bri, color_mode value, vector_shared<light> lights) {
+			return std::make_shared<group>(owner, std::move(idx), std::move(id), std::move(name), std::move(type), std::move(klass), on, some, bri, std::move(value), std::move(lights));
 		}
 
 		static void prepare(json::struct_translator& tr);

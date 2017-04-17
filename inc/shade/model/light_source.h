@@ -106,25 +106,34 @@ namespace shade { namespace model {
 	}
 	using color_mode = mode::color;
 
+	class bridge;
 	class light_source {
+		std::string idx_;
 		std::string id_;
 		std::string name_;
 		std::string type_; // Group type or Light modelid
 		bool on_;
 		int brightness_;
 		color_mode value_;
+		std::weak_ptr<model::bridge> owner_;
 	public:
 		light_source() = default;
-		light_source(std::string id, std::string name, std::string type, bool on, int bri, color_mode value)
-			: id_{ std::move(id) }
+		light_source(const std::shared_ptr<model::bridge>& owner, std::string idx, std::string id, std::string name, std::string type, bool on, int bri, color_mode value)
+			: idx_{ std::move(idx) }
+			, id_{ std::move(id) }
 			, name_{ std::move(name) }
 			, type_{ std::move(type) }
 			, on_{ on }
 			, brightness_{ bri }
 			, value_{ std::move(value) }
+			, owner_{ owner }
 		{}
 		virtual ~light_source() = default;
 
+		std::shared_ptr<model::bridge> bridge() const { return owner_.lock(); }
+		void bridge(const std::shared_ptr<model::bridge>& v) { owner_ = v; }
+		const std::string& index() const { return idx_; }
+		void index(const std::string& v) { idx_ = v; }
 		const std::string& id() const { return id_; }
 		void id(const std::string& v) { id_ = v; }
 		const std::string& name() const { return name_; }
