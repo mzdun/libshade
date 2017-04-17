@@ -45,6 +45,12 @@ public:
 	}
 };
 
+template <typename GetValue, typename GetString>
+struct source_info {
+	GetValue val;
+	GetString title;
+};
+
 inline auto device_state(const std::shared_ptr<shade::model::light_source>& src)
 {
 	return [=](int bri) {
@@ -58,8 +64,7 @@ inline auto device_state(const std::shared_ptr<shade::model::light_source>& src)
 			out.push_back('-');
 			out.push_back('-');
 			out.push_back(' ');
-		}
-		else {
+		} else {
 			char buf[10];
 			sprintf(buf, "%3d%%", (bri * 100) / max_bri);
 			out.append(buf);
@@ -175,7 +180,7 @@ void first_screen::rebuild_list()
 			items.push_back(item::simple(
 				device_brightness(group),
 				device_state(group),
-				[=]() {}
+				[=] { parent_->light_menu(group); }
 			));
 		}
 	}
@@ -195,7 +200,7 @@ void first_screen::rebuild_list()
 			items.push_back(item::simple(
 				device_brightness(light),
 				device_state(light),
-				[=]() {}
+				[=] { parent_->light_menu(light); }
 			));
 		}
 	}
@@ -204,10 +209,10 @@ void first_screen::rebuild_list()
 		title_ = "Choose devices";
 
 	items.push_back(item::special(
-		[=]() { return parent_->is_heartbeat_on(); },
+		[=] { return parent_->is_heartbeat_on(); },
 		tick_out("Refresh state"),
-		[=]() { parent_->switch_heartbeat(); }));
-	items.push_back(item::special("Select devices", [this]() { parent_->select_items(); }));
+		[=] { parent_->switch_heartbeat(); }));
+	items.push_back(item::special("Select devices", [this] { parent_->select_items(); }));
 
 	items_.swap(items);
 }
@@ -275,6 +280,7 @@ void client::onload(const shade::cache& view)
 			ref.selected.clear();
 		}
 
+#if 0
 		for (auto const& bridge : view.bridges()) {
 			printf("BRIDGE %s:\n", bridge.first.c_str());
 			auto & hw = bridge.second->hw();
@@ -306,6 +312,7 @@ void client::onload(const shade::cache& view)
 					printf("        -> %s\n", ref.c_str());
 			}
 		}
+#endif
 	}
 
 	menu_.show_menu(std::make_unique<first_screen>(this));
@@ -440,7 +447,7 @@ void client::select_items()
 			items.push_back(item::simple(
 				is_selected(bridge, id),
 				tick_out(group->name()),
-				[=]() { bridge->host().switch_selection(id); manager_->store_cache(); }
+				[=] { bridge->host().switch_selection(id); manager_->store_cache(); }
 			));
 		}
 	}
@@ -452,9 +459,75 @@ void client::select_items()
 			items.push_back(item::simple(
 				is_selected(bridge, id),
 				tick_out(light->name()),
-				[=]() { bridge->host().switch_selection(id); manager_->store_cache(); }
+				[=] { bridge->host().switch_selection(id); manager_->store_cache(); }
 			));
 		}
 	}
 	menu_.show_menu(std::make_unique<current<>>("Select devices", std::move(items)));
+}
+
+template <typename Pred, typename Base = menu::current>
+class dyn_title : public Base {
+	Pred pred_;
+	mutable std::string title_;
+public:
+	using title_arg = Pred&&;
+
+	dyn_title(title_arg pred)
+		: pred_{ std::move(pred) }
+	{
+	}
+
+	menu::label title() const override { return title_; }
+
+	void refresh_title() const { title_ = pred_(); }
+};
+
+template <typename Pred>
+auto make_light_menu(Pred val, std::vector<std::unique_ptr<menu::impl::item>> items) {
+	using namespace menu::impl;
+	return std::make_unique<current<dyn_title<Pred>>>(std::move(val), std::move(items));
+}
+
+void client::light_menu(const std::shared_ptr<shade::model::light_source>& source)
+{
+	using namespace menu::impl;
+	std::vector<std::unique_ptr<item>> items;
+	items.reserve(7);
+
+	items.push_back(item::simple(
+		[=] { return source->on(); },
+		tick_out("Turn on"),
+		[=] { switch_light(source); }
+	));
+	items.push_back(item::simple("Brightness 100%", [=] { brightness(source, +100); }));
+	items.push_back(item::simple("Brightness +10%", [=] { brightness(source,  +10); }));
+	items.push_back(item::simple("Brightness  +1%", [=] { brightness(source,   +1); }));
+	items.push_back(item::simple("Brightness  -1%", [=] { brightness(source,   -1); }));
+	items.push_back(item::simple("Brightness -10%", [=] { brightness(source,  -10); }));
+	items.push_back(item::simple("Brightness   0%", [=] { brightness(source, -100); }));
+
+	menu_.show_menu(make_light_menu(
+		[val = device_brightness(source), str = device_state(source)]{ return str(val()); },
+		std::move(items)
+	));
+}
+
+void client::switch_light(const std::shared_ptr<shade::model::light_source>& light)
+{
+	bool on = !light->on();
+	manager_->update(light, shade::change_def{}.on(on));
+}
+
+void client::brightness(const std::shared_ptr<shade::model::light_source>& light, int change)
+{
+	using namespace shade::model::mode;
+
+	auto base = light->bri();
+	auto value = clamp(base + (change * max_value) / 100);
+
+	if (base == value)
+		return;
+
+	manager_->update(light, shade::change_def{}.bri(value));
 }

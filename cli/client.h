@@ -48,4 +48,7 @@ private:
 	void switch_heartbeat();
 	void stop_heartbeats();
 	void select_items();
+	void light_menu(const std::shared_ptr<shade::model::light_source>&);
+	void switch_light(const std::shared_ptr<shade::model::light_source>&);
+	void brightness(const std::shared_ptr<shade::model::light_source>&, int change);
 };

@@ -164,6 +164,11 @@ namespace menu {
 				if (n == 99) {
 					stack_.top().menu->on_exit();
 					stack_.pop();
+				} else if (n == 999) {
+					while (!stack_.empty()) {
+						stack_.top().menu->on_exit();
+						stack_.pop();
+					}
 				} else {
 					auto it = cur.mapping.find(n);
 					if (it == cur.mapping.end())
