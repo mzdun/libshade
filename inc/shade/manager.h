@@ -1,8 +1,8 @@
 #pragma once
 
-#include "shade/discovery.h"
-#include "shade/cache.h"
-#include "shade/io/http.h"
+#include <shade/discovery.h>
+#include <shade/cache.h>
+#include <shade/io/http.h>
 
 namespace json { struct value; }
 
@@ -20,6 +20,10 @@ namespace shade {
 		struct manager;
 	}
 
+	struct heart_monitor {
+		virtual ~heart_monitor() = default;
+	};
+
 	class manager {
 	public:
 		manager(const std::string& name, listener::manager* listener, io::network* net, io::http* browser);
@@ -30,6 +34,7 @@ namespace shade {
 		void store_cache();
 		void search();
 		void connect(const std::shared_ptr<model::bridge>&);
+		std::shared_ptr<heart_monitor> defib(const std::shared_ptr<model::bridge>&);
 	private:
 		listener::manager* listener_;
 		io::network* net_;
@@ -37,14 +42,9 @@ namespace shade {
 		discovery discovery_{ net_ };
 		std::unordered_map<std::string, std::unique_ptr<io::timeout>> timeouts_;
 
-		bool reconnect(json::value doc, const std::shared_ptr<model::bridge>& bridge);
-
 		void get_config(const io::connection& conn);
 
 		void connect(const std::shared_ptr<model::bridge>&, std::chrono::nanoseconds sofar);
 		void getuser(const std::shared_ptr<model::bridge>& bridge, int status, json::value doc, std::chrono::nanoseconds sofar, std::chrono::steady_clock::time_point then);
-
-		void get_lights(const std::shared_ptr<model::bridge>& bridge);
-		void get_groups(const std::shared_ptr<model::bridge>& bridge, std::unordered_map<std::string, hue::light> lights);
 	};
 }

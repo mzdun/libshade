@@ -40,6 +40,6 @@ namespace shade {
 		void bridge_lights(const std::shared_ptr<model::bridge>& bridge,
 			std::unordered_map<std::string, hue::light> lights,
 			std::unordered_map<std::string, hue::group> groups,
-			listener::storage* storage);
+			listener::storage* storage, listener::bridge* changes);
 	};
 }

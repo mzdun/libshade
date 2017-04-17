@@ -1,4 +1,4 @@
-#include "shade/cache.h"
+#include <shade/cache.h>
 #include "model/json.h"
 #include <algorithm>
 #include <cstdio>
@@ -57,9 +57,9 @@ namespace shade {
 	void cache::bridge_lights(const std::shared_ptr<model::bridge>& bridge,
 		std::unordered_map<std::string, hue::light> lights,
 		std::unordered_map<std::string, hue::group> groups,
-		listener::storage* storage)
+		listener::storage* storage, listener::bridge* changes)
 	{
-		if (bridge->bridge_lights(std::move(lights), std::move(groups)))
+		if (bridge->bridge_lights(std::move(lights), std::move(groups), changes))
 			storage->mark_dirty();
 	}
 

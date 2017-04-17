@@ -1,4 +1,4 @@
-#include "shade/io/connection.h"
+#include <shade/io/connection.h>
 
 namespace shade { namespace io {
 	connection connection::logged(const std::string& username) const

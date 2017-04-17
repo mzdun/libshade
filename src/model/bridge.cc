@@ -1,5 +1,6 @@
-#include "shade/model/bridge.h"
-#include "shade/hue_data.h"
+#include <shade/model/bridge.h>
+#include <shade/hue_data.h>
+#include <shade/listener.h>
 #include "json.h"
 #include <algorithm>
 #include <cstdio>
@@ -81,9 +82,65 @@ namespace shade { namespace model {
 		tr.OPT_PRIV_PROP(hosts);
 	}
 
+	class listener_proxy : public listener::bridge {
+		listener::bridge* listener_;
+		model::bridge* braces_;
+		bool started_ = false;
+	public:
+		listener_proxy(listener::bridge* listener, model::bridge* braces)
+			: listener_{ listener }
+			, braces_{ braces }
+		{
+		}
+
+		~listener_proxy()
+		{
+			if (started_)
+				listener_->update_end(braces_->shared_from_this());
+		}
+
+		void update_start(const std::shared_ptr<model::bridge>&) override {}
+
+		void source_added(const std::shared_ptr<model::light_source>& source) override
+		{
+			if (!started_)
+				listener_->update_start(braces_->shared_from_this());
+			started_ = true;
+			listener_->source_added(source);
+		}
+
+		void source_removed(const std::shared_ptr<model::light_source>& source) override
+		{
+			if (!started_)
+				listener_->update_start(braces_->shared_from_this());
+			started_ = true;
+			listener_->source_removed(source);
+		}
+
+		void source_changed(const std::shared_ptr<model::light_source>& source) override
+		{
+			if (!started_)
+				listener_->update_start(braces_->shared_from_this());
+			started_ = true;
+			listener_->source_changed(source);
+		}
+
+		void update_end(const std::shared_ptr<model::bridge>&) override {}
+	};
+
+	class listener_nil : public listener::bridge {
+	public:
+		void update_start(const std::shared_ptr<model::bridge>&) override {};
+		void source_added(const std::shared_ptr<model::light_source>&) override {};
+		void source_removed(const std::shared_ptr<model::light_source>&) override {};
+		void source_changed(const std::shared_ptr<model::light_source>&) override {};
+		void update_end(const std::shared_ptr<model::bridge>&) override {};
+	};
+
 	bool bridge::bridge_lights(
 		std::unordered_map<std::string, hue::light> lights,
-		std::unordered_map<std::string, hue::group> groups)
+		std::unordered_map<std::string, hue::group> groups,
+		listener::bridge* listener)
 	{
 		for (auto& group : groups) {
 			for (auto& lightref : group.second.lights) {
@@ -96,10 +153,14 @@ namespace shade { namespace model {
 			}
 		}
 
-		return update_lights(std::move(lights)) || update_groups(std::move(groups));
+		listener_proxy proxy{ listener, this };
+		listener_nil nil;
+		auto ptr = listener ? (listener::bridge*)&proxy : &nil;
+
+		return update_lights(std::move(lights), ptr) || update_groups(std::move(groups), ptr);
 	}
 
-	bool bridge::update_lights(std::unordered_map<std::string, hue::light> lights)
+	bool bridge::update_lights(std::unordered_map<std::string, hue::light> lights, listener::bridge* listener)
 	{
 		bool needs_update = false;
 		vector_shared<light> still_existing;
@@ -109,11 +170,12 @@ namespace shade { namespace model {
 				return pair.second.uniqueid == id;
 			});
 			if (it == end(lights)) {
-				// TODO: notify removal...
+				listener->source_removed(source);
 				continue;
 			}
 			auto updated = source->update(it->first, std::move(it->second));
-			// TODO: if (updated) notify about updated source
+			if (updated)
+				listener->source_changed(source);
 			needs_update |= updated;
 			still_existing.push_back(source);
 		}
@@ -123,16 +185,12 @@ namespace shade { namespace model {
 			if (id.empty())
 				continue;
 
-			printf("[NEW] Looking for '%s'... ", id.c_str());
 			auto it = std::find_if(begin(lights_), end(lights_), [&id](const auto& ptr) {
 				return ptr->id() == id;
 			});
 
-			if (it != end(lights_)) {
-				printf("DONE [%s:%s]\n", (*it)->id().c_str(), (*it)->name().c_str());
+			if (it != end(lights_))
 				continue;
-			}
-			printf("DONE [--none--]\n");
 
 			auto new_source = model::light::make(
 				std::move(in.second.uniqueid),
@@ -144,14 +202,14 @@ namespace shade { namespace model {
 			);
 			needs_update = true;
 			still_existing.push_back(new_source);
-			// TODO: notify about new source
+			listener->source_added(new_source);
 		}
 
 		std::swap(lights_, still_existing);
 		return needs_update;
 	}
 
-	bool bridge::update_groups(std::unordered_map<std::string, hue::group> groups)
+	bool bridge::update_groups(std::unordered_map<std::string, hue::group> groups, listener::bridge* listener)
 	{
 		bool needs_update = false;
 		vector_shared<group> still_existing;
@@ -161,11 +219,12 @@ namespace shade { namespace model {
 				return "group/" + pair.first == id;
 			});
 			if (it == end(groups)) {
-				// TODO: notify removal...
+				listener->source_removed(source);
 				continue;
 			}
 			auto updated = source->update(it->first, std::move(it->second), lights_);
-			// TODO: if (updated) notify about updated source
+			if (updated)
+				listener->source_changed(source);
 			needs_update |= updated;
 			still_existing.push_back(source);
 		}
@@ -191,7 +250,7 @@ namespace shade { namespace model {
 			);
 			needs_update = true;
 			still_existing.push_back(new_source);
-			// TODO: notify about new source
+			listener->source_added(new_source);
 		}
 
 		std::swap(groups_, still_existing);

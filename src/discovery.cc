@@ -1,6 +1,6 @@
-#include "shade/discovery.h"
-#include "tangle/msg/http_parser.h"
-#include "tangle/uri.h"
+#include <shade/discovery.h>
+#include <tangle/msg/http_parser.h>
+#include <tangle/uri.h>
 
 #define DISCOVERY_TIMEOUT 5
 #define STR2(x) #x

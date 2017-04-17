@@ -5,7 +5,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "shade/io/network.h"
+#include <shade/io/network.h>
 
 namespace shade {
 	class discovery {

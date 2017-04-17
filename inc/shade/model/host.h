@@ -18,6 +18,7 @@ namespace shade { namespace model {
 	public:
 		host() = default;
 		host(const std::string& name) : name_{ name } {}
+
 		static void prepare(json::struct_translator&);
 
 		const std::string& name() const { return name_; }

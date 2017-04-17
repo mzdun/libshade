@@ -28,6 +28,7 @@ CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/inc/shade/version.in.h ${CMAKE_CURREN
 set(SRCS
 	src/cache.cc
 	src/manager.cc
+	src/heartbeat.cc
 	src/discovery.cc
 	src/storage.cc
 )
@@ -35,6 +36,7 @@ set(SRCS
 set(INCS
 	inc/shade/cache.h
 	inc/shade/manager.h
+	inc/shade/heartbeat.h
 	inc/shade/discovery.h
 	inc/shade/storage.h
 	"${CMAKE_CURRENT_BINARY_DIR}/inc/shade/version.h"
@@ -129,6 +131,9 @@ if (WIN32)
 add_definitions(-D_WIN32_WINNT=0x0600)
 set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+else()
+set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG} -ggdb")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb")
 endif()
 
 add_library(shade STATIC

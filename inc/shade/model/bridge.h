@@ -18,6 +18,10 @@ namespace shade { namespace hue {
 	struct group;
 } }
 
+namespace shade { namespace listener {
+	struct bridge;
+} }
+
 namespace shade { namespace io {
 	struct http;
 } }
@@ -45,7 +49,7 @@ namespace shade { namespace model {
 
 #undef MEM_EQ
 
-	class bridge {
+	class bridge : public std::enable_shared_from_this<bridge> {
 		bool seen_ = false;
 		std::string id_;
 		hw_info hw_;
@@ -58,6 +62,10 @@ namespace shade { namespace model {
 	public:
 		bridge() = default;
 		bridge(const std::string& id, io::http* browser);
+		bridge(const bridge&) = delete;
+		bridge& operator=(const bridge&) = delete;
+		bridge(bridge&&) = default;
+		bridge& operator=(bridge&&) = delete;
 		void from_storage(const std::string& id, io::http* browser);
 
 		static void prepare(json::struct_translator&);
@@ -81,7 +89,8 @@ namespace shade { namespace model {
 
 		bool bridge_lights(
 			std::unordered_map<std::string, hue::light> lights,
-			std::unordered_map<std::string, hue::group> groups);
+			std::unordered_map<std::string, hue::group> groups,
+			listener::bridge* listener);
 
 		void seen(std::string name, std::string mac, std::string modelid)
 		{
@@ -95,7 +104,7 @@ namespace shade { namespace model {
 		void connect(std::chrono::nanoseconds sofar);
 		void getuser(int status, json::value doc, std::chrono::nanoseconds sofar, std::chrono::steady_clock::time_point then);
 
-		bool update_lights(std::unordered_map<std::string, hue::light> lights);
-		bool update_groups(std::unordered_map<std::string, hue::group> groups);
+		bool update_lights(std::unordered_map<std::string, hue::light> lights, listener::bridge* listener);
+		bool update_groups(std::unordered_map<std::string, hue::group> groups, listener::bridge* listener);
 	};
 } }

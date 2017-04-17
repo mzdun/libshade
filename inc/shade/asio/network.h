@@ -1,7 +1,7 @@
 #pragma once
 
-#include "boost/asio.hpp"
-#include "shade/io/network.h"
+#include <boost/asio.hpp>
+#include <shade/io/network.h>
 
 namespace shade { namespace io { namespace asio {
 	using namespace boost::asio;

@@ -1,6 +1,6 @@
-#include "shade/manager.h"
-#include "shade/hue_data.h"
-#include "json.hpp"
+#include <shade/manager.h>
+#include <shade/hue_data.h>
+#include <json.hpp>
 
 using namespace std::literals;
 

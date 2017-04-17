@@ -1,9 +1,10 @@
 #include <shade/manager.h>
 #include <shade/listener.h>
+#include <shade/heartbeat.h>
 #include <shade/storage.h>
 #include <shade/io/connection.h>
 #include <json.hpp>
-#include "manager_internal.h"
+#include "internal.h"
 #include <algorithm>
 
 using namespace std::literals;
@@ -83,12 +84,12 @@ namespace shade {
 	}
 
 	std::string machine();
-	std::string userdefinition(const std::string& listener) {
+	std::string userdefinition(const std::string& application) {
 		auto name = machine();
 		if (name.empty())
 			name = "unknown";
 
-		return json::map{}.add("devicetype", listener + "#" + name).to_string();
+		return json::map{}.add("devicetype", application + "#" + name).to_string();
 	}
 
 	void manager::connect(const std::shared_ptr<model::bridge>& bridge, std::chrono::nanoseconds sofar)
@@ -156,51 +157,24 @@ namespace shade {
 			listener->onfailed(bridge);
 	}
 
-	bool manager::reconnect(json::value doc, const std::shared_ptr<model::bridge>& bridge)
-	{
-		hue::errors error;
-		if (get_error(error, doc)) {
-			if (error == hue::errors::unauthorised_user) {
-				auto listener = listener_->connection_listener(bridge);
-				if (listener)
-					listener->onlost(bridge);
-				return true;
-			}
+	class monitor : public heart_monitor {
+		std::shared_ptr<heartbeat> beat_;
+	public:
+		monitor(std::shared_ptr<heartbeat> beat)
+			: beat_{ std::move(beat) }
+		{
 		}
-		return false;
-	}
 
-	void manager::get_lights(const std::shared_ptr<model::bridge>& bridge)
+		~monitor()
+		{
+			beat_->stop();
+		}
+	};
+
+	std::shared_ptr<heart_monitor> manager::defib(const std::shared_ptr<model::bridge>& bridge)
 	{
-		bridge->logged(view_.browser()).get("/lights", io::make_client([=](int status, json::value doc) {
-			std::unordered_map<std::string, hue::light> lights;
-			if (unpack_json(lights, doc)) {
-				get_groups(bridge, std::move(lights));
-				return;
-			}
-
-			if (reconnect(doc, bridge))
-				return;
-
-			printf("GETTING LIGHTS: %d\n%s\n", status, doc.to_string(json::value::options::indented()).c_str());
-		}));
+		auto beat = std::make_shared<heartbeat>(&view_, listener_, net_, bridge);
+		beat->start();
+		return std::make_shared<monitor>(std::move(beat));
 	}
-
-	void manager::get_groups(const std::shared_ptr<model::bridge>& bridge, std::unordered_map<std::string, hue::light> lights)
-	{
-		bridge->logged(view_.browser()).get("/groups", io::make_client([=, lights = std::move(lights)](int status, json::value doc) {
-			std::unordered_map<std::string, hue::group> groups;
-			if (unpack_json(groups, doc)) {
-				storage_listener listener{ &view_ };
-				view_.bridge_lights(bridge, std::move(lights), std::move(groups), &listener);
-				return;
-			}
-
-			if (reconnect(doc, bridge))
-				return;
-
-			printf("GETTING GROUPS: %d\n%s\n", status, doc.to_string(json::value::options::indented()).c_str());
-		}));
-	}
-
 }
