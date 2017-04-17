@@ -39,6 +39,7 @@ namespace menu {
 		virtual item_type type(size_t i) = 0;
 		virtual label text(size_t i) = 0;
 		virtual void call(size_t i) = 0;
+		virtual void on_exit() { }
 	};
 
 	class control {

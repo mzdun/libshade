@@ -162,6 +162,7 @@ namespace menu {
 			auto n = (int)strtol(input.c_str(), &end, 10);
 			if (!end || !*end) {
 				if (n == 99) {
+					stack_.top().menu->on_exit();
 					stack_.pop();
 				} else {
 					auto it = cur.mapping.find(n);

@@ -39,6 +39,10 @@ public:
 	menu::item_type type(size_t i) override { return items_[i]->type(); }
 	menu::label text(size_t i) override { return items_[i]->text(); }
 	void call(size_t i) override { return items_[i]->call(); }
+	void on_exit() {
+		printf("EXITING\n");
+		parent_->stop_heartbeats();
+	}
 };
 
 inline auto device_state(const std::shared_ptr<shade::model::light_source>& src)
@@ -90,9 +94,9 @@ inline auto tick_out(const std::string& text)
 	};
 }
 
-inline auto is_selected(shade::model::host& host, const std::string& deviceid)
+inline auto is_selected(const std::shared_ptr<shade::model::bridge>& bridge, const std::string& deviceid)
 {
-	return [=]() -> bool { return host.is_selected(deviceid); };
+	return [=]() -> bool { return bridge->host().is_selected(deviceid); };
 }
 
 void first_screen::refresh()
@@ -200,9 +204,9 @@ void first_screen::rebuild_list()
 		title_ = "Choose devices";
 
 	items.push_back(item::special(
-		[=]() { return parent_->heartbeat_on(); },
+		[=]() { return parent_->is_heartbeat_on(); },
 		tick_out("Refresh state"),
-		[=]() { parent_->heartbeat(); }));
+		[=]() { parent_->switch_heartbeat(); }));
 	items.push_back(item::special("Select devices", [this]() { parent_->select_items(); }));
 
 	items_.swap(items);
@@ -328,14 +332,16 @@ void client::onbridge(const std::shared_ptr<shade::model::bridge>& bridge)
 		printf("    modelid: [%s]\n", hw.modelid.c_str());
 		local.hw.modelid = hw.modelid;
 	}
-	menu_.refresh();
 
 	if (bridge->host().username().empty()) {
 		manager_->connect(bridge);
+		menu_.refresh();
 		return;
 	}
 
-	// TODO: heartbeat for bridge
+	if (!ignore_heartbeats_)
+		heartbeats_[bridge->id()] = manager_->defib(bridge);
+	menu_.refresh();
 }
 
 // shade::listener::connection
@@ -348,8 +354,10 @@ void client::onconnected(const std::shared_ptr<shade::model::bridge>& bridge)
 {
 	printf("THANK YOU.\n");
 	printf("    username: [%s]\n", bridge->host().username().c_str());
+
+	if (!ignore_heartbeats_)
+		heartbeats_[bridge->id()] = manager_->defib(bridge);
 	menu_.refresh();
-	// TODO: heartbeat for bridge
 }
 
 void client::onfailed(const std::shared_ptr<shade::model::bridge>&)
@@ -361,6 +369,7 @@ void client::onfailed(const std::shared_ptr<shade::model::bridge>&)
 void client::onlost(const std::shared_ptr<shade::model::bridge>& bridge)
 {
 	printf("CONNECTION LOST.\n");
+	stop_heartbeats();
 	menu_.refresh();
 }
 
@@ -390,14 +399,27 @@ void client::update_end(const std::shared_ptr<shade::model::bridge>&)
 	menu_.refresh();
 }
 
-bool client::heartbeat_on() const
+bool client::is_heartbeat_on() const
 {
-	return fake_hb;
+	return !heartbeats_.empty();
 }
 
-void client::heartbeat()
+void client::switch_heartbeat()
 {
-	fake_hb = !fake_hb;
+	if (!heartbeats_.empty()) {
+		ignore_heartbeats_ = true;
+		heartbeats_.clear();
+		return;
+	}
+
+	ignore_heartbeats_ = false;
+	for (auto const& pair : manager_->view())
+		heartbeats_[pair.first] = manager_->defib(pair.second);
+}
+
+void client::stop_heartbeats()
+{
+	heartbeats_.clear();
 }
 
 void client::select_items()
@@ -411,26 +433,26 @@ void client::select_items()
 	}
 	items.reserve(length + 1);
 
-	for (auto& bridge : manager_->view().bridges()) {
-		auto& host = bridge.second->host();
-		for (auto const& group : bridge.second->groups()) {
+	for (auto& pair : manager_->view().bridges()) {
+		auto bridge = pair.second;
+		for (auto const& group : bridge->groups()) {
 			auto id = group->id();
 			items.push_back(item::simple(
-				is_selected(host, id),
+				is_selected(bridge, id),
 				tick_out(group->name()),
-				[&]() { host.switch_selection(id); manager_->store_cache(); }
+				[=]() { bridge->host().switch_selection(id); manager_->store_cache(); }
 			));
 		}
 	}
 	items.push_back(item::separator());
-	for (auto const& bridge : manager_->view().bridges()) {
-		auto& host = bridge.second->host();
-		for (auto const& light : bridge.second->lights()) {
+	for (auto const& pair : manager_->view().bridges()) {
+		auto bridge = pair.second;
+		for (auto const& light : bridge->lights()) {
 			auto id = light->id();
 			items.push_back(item::simple(
-				is_selected(host, id),
+				is_selected(bridge, id),
 				tick_out(light->name()),
-				[&]() { host.switch_selection(id); manager_->store_cache(); }
+				[=]() { bridge->host().switch_selection(id); manager_->store_cache(); }
 			));
 		}
 	}

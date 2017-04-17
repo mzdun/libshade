@@ -17,8 +17,10 @@ struct client
 		shade::model::hw_info hw;
 	};
 	std::unordered_map<std::string, bridge_info> local_;
+	std::unordered_map<std::string, std::shared_ptr<shade::heart_monitor>> heartbeats_;
 	shade::manager* manager_ = nullptr;
 	menu::control menu_;
+	bool ignore_heartbeats_ = false;
 
 	client(boost::asio::io_service& service);
 
@@ -42,8 +44,8 @@ struct client
 	void update_end(const std::shared_ptr<shade::model::bridge>&) override;
 
 private:
-	bool fake_hb = true;
-	bool heartbeat_on() const;
-	void heartbeat();
+	bool is_heartbeat_on() const;
+	void switch_heartbeat();
+	void stop_heartbeats();
 	void select_items();
 };
