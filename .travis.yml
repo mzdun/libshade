@@ -12,28 +12,18 @@ addons:
     packages:
       - gcc-6
       - g++-6
-      - libboost-all-dev
+      - libboost1.63-all-dev
 
 install:
-  # get the cmake
-  - sudo apt-get update -qq
-  - sudo apt-get install -qq cmake
-  - cmake --version
   # setup g++ 6
   - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-6 90
   - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 90
   # cmake from sources
   - CMAKE_VERSION="3.8"
   - CMAKE_FULL="${CMAKE_VERSION}.0"
-  - wget "https://cmake.org/files/v${CMAKE_VERSION}/cmake-${CMAKE_FULL}.tar.gz"
-  - openssl sha1 "cmake-${CMAKE_FULL}.tar.gz"
-  - tar xf "cmake-${CMAKE_FULL}.tar.gz"
-  - cd "cmake-${CMAKE_FULL}"
-  - ./bootstrap --prefix=~
-  - make
-  - make install
-  - export PATH="~/bin:${PATH}"
-  - cd ..
+  - wget "https://cmake.org/files/v${CMAKE_VERSION}/cmake-${CMAKE_FULL}-Linux-x86_64.tar.gz"
+  - tar xf "cmake-${CMAKE_FULL}-Linux-x86_64.tar.gz"
+  - export PATH="${PWD}/cmake-${CMAKE_FULL}-Linux-x86_64/bin:${PATH}"
   # verify installed versions
   - which cmake
   - cmake --version
