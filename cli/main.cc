@@ -16,7 +16,7 @@ int main() try {
 		return 2;
 	}
 
-	printf("shade-cli version %s\n\n", SHADE_VERSION_FULL);
+	printf("shade-cli version %s (%s)\n\n", SHADE_VERSION_FULL, SHADE_VERSION_VCS);
 	events.manager_ = &hue;
 	hue.search();
 
